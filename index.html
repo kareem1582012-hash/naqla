@@ -41,15 +41,13 @@
             <input type="text" id="name" placeholder="الاسم بالكامل" class="w-full p-3 border rounded-lg mb-3">
             <input type="text" id="phone" placeholder="رقم الهاتف" class="w-full p-3 border rounded-lg mb-3" dir="ltr">
             <button onclick="handleAuth()" id="authBtn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg transition">دخول</button>
-            <p class="text-center text-xs text-gray-500 mt-3">لو مفيش حساب، هيتم إنشاء حساب جديد تلقائياً</p>
         </div>
 
-        <!-- شاشة انتظار الموافقة للسائق -->
+        <!-- شاشة انتظار الموافقة -->
         <div id="approvalScreen" class="hide text-center bg-white p-6 rounded-2xl shadow-lg mt-10">
             <div class="text-5xl mb-4">⏳</div>
             <h2 class="text-xl font-bold text-red-600 mb-4">حسابك قيد المراجعة</h2>
-            <p class="text-gray-600 mb-4">أهلاً بك يا كابتن. حسابك حالياً قيد المراجعة من قبل إدارة المنصة للتأكد من بياناتك.</p>
-            <p class="text-sm text-gray-500">سيتم تفعيل حسابك قريباً لتتمكن من استلام الشحنات.</p>
+            <p class="text-gray-600 mb-4">أهلاً بك يا كابتن. حسابك قيد المراجعة من الإدارة.</p>
         </div>
 
         <!-- واجهة العميل -->
@@ -71,6 +69,12 @@
                     <option value="جامبو">جامبو</option>
                     <option value="تريلا">تريلا</option>
                 </select>
+                <!-- طرق الدفع -->
+                <select id="payment_method" class="w-full p-2 border rounded-lg mb-2 bg-gray-50 font-bold text-blue-700">
+                    <option value="cash">💵 الدفع نقداً (كاش)</option>
+                    <option value="instapay">📱 إنستا باي (InstaPay)</option>
+                    <option value="visa">💳 فيزا / ماستركارد</option>
+                </select>
                 <div class="flex items-center gap-2 mb-2 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
                     <input type="checkbox" id="labor" class="w-4 h-4">
                     <label for="labor" class="text-sm font-bold text-gray-700">أحتاج عمال تحميل (+240 ج.م)</label>
@@ -90,12 +94,8 @@
         <div id="driverScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
-                    <p class="text-gray-400 text-sm">الأرباح / الرصيد</p>
+                    <p class="text-gray-400 text-sm">صافي الأرباح</p>
                     <p class="text-2xl font-bold text-yellow-500" id="driverWallet">0 ج.م</p>
-                </div>
-                <div class="text-center">
-                    <p class="text-gray-400 text-xs">التقييم</p>
-                    <p class="font-bold text-yellow-500 text-xl">⭐ 5.0</p>
                 </div>
             </div>
 
@@ -110,13 +110,12 @@
         <div id="adminScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
-                <p class="text-sm text-gray-400 mt-1">مرحباً بك يا مدير المنصة</p>
             </div>
 
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين المسجلين</h3>
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين (بيانات كاملة)</h3>
             <div id="adminUsersList" class="mb-6"></div>
 
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">كل الطلبات</h3>
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">سجل الطلبات (مراجعة يومية)</h3>
             <div id="adminOrdersList"></div>
         </div>
 
@@ -125,12 +124,10 @@
     <script>
         const SUPABASE_URL = 'https://jzcwocvkqbuhpactazus.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_ndfcyfS3Mz90d5_E-LQnbg_FW-cyLsJ';
-        
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
         let currentUser = null;
         let currentProfile = null;
-
         let map = null;
         let marker = null;
         let selectedLat = 30.0444; 
@@ -138,134 +135,130 @@
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
+        // دالة الدخول
         async function handleAuth() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const name = document.getElementById('name').value || 'مستخدم جديد';
-            const phone = document.getElementById('phone').value || '';
+            const phone = document.getElementById('phone').value || 'غير مسجل';
             const role = document.getElementById('role').value;
 
             if(!email || !password) return alert('اكتب الإيميل والباسورد');
 
-            let { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            
-            if (error && error.message.includes('Invalid login credentials')) {
-                const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({ email, password });
-                if (signUpError) return alert('خطأ في التسجيل: ' + signUpError.message);
+            try {
+                let { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
                 
-                const { error: profileError } = await supabaseClient.from('profiles').insert({
-                    id: signUpData.user.id,
-                    full_name: name,
-                    phone: phone,
-                    role: role,
-                    wallet_balance: role === 'driver' ? 0 : 2500,
-                    approved: role === 'client' ? true : false
-                });
-
-                if (profileError) console.error(profileError);
-                
-                alert('تم إنشاء الحساب بنجاح!');
-                setTimeout(() => loadApp(signUpData.user), 1000);
-            } else if (error) {
-                return alert('خطأ: ' + error.message);
-            } else {
-                loadApp(data.user);
+                if (error && error.message.includes('Invalid login credentials')) {
+                    const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({ email, password });
+                    if (signUpError) throw signUpError;
+                    
+                    await supabaseClient.from('profiles').insert({
+                        id: signUpData.user.id,
+                        full_name: name,
+                        phone: phone,
+                        role: role,
+                        wallet_balance: role === 'driver' ? 0 : 2500,
+                        approved: role === 'client' ? true : false
+                    });
+                    
+                    alert('تم إنشاء الحساب بنجاح!');
+                    setTimeout(() => loadApp(signUpData.user), 1000);
+                } else if (error) {
+                    throw error;
+                } else {
+                    loadApp(data.user);
+                }
+            } catch (err) {
+                alert('خطأ: ' + err.message);
             }
         }
 
+        // تحميل التطبيق
         async function loadApp(user) {
             if(!user) return showScreen('authScreen');
             currentUser = user;
             
-            let { data, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).maybeSingle();
-            
-            if (!data) {
-                const { data: newProfile, error: insertError } = await supabaseClient.from('profiles').insert({
-                    id: user.id,
-                    full_name: user.email.split('@')[0],
-                    role: 'client',
-                    wallet_balance: 2500,
-                    approved: true
-                }).select().single();
-
-                if (insertError) return alert('مشكلة في السيرفر: ' + insertError.message);
-                data = newProfile;
-            }
-
-            currentProfile = data;
-            document.getElementById('logoutBtn').classList.remove('hide');
-            
-            if(data.role === 'client' || !data.role) {
-                document.getElementById('clientWallet').innerText = formatMoney(data.wallet_balance);
-                showScreen('clientScreen');
-                renderClientOrders();
-                setTimeout(initMap, 200);
-            } else if(data.role === 'driver') {
-                if(!data.approved) {
-                    showScreen('approvalScreen');
-                } else {
-                    document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
-                    showScreen('driverScreen');
-                    renderDriverOrders();
+            try {
+                let { data, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+                if (error) throw error;
+                
+                currentProfile = data;
+                document.getElementById('logoutBtn').classList.remove('hide');
+                
+                if(data.role === 'client') {
+                    document.getElementById('clientWallet').innerText = formatMoney(data.wallet_balance);
+                    showScreen('clientScreen');
+                    renderClientOrders();
+                    setTimeout(initMap, 200);
+                } else if(data.role === 'driver') {
+                    if(!data.approved) {
+                        showScreen('approvalScreen');
+                    } else {
+                        document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
+                        showScreen('driverScreen');
+                        renderDriverOrders();
+                    }
+                } else if(data.role === 'admin') {
+                    showScreen('adminScreen');
+                    loadAdminData();
                 }
-            } else if(data.role === 'admin') {
-                showScreen('adminScreen');
-                loadAdminData();
+            } catch (err) {
+                alert('خطأ في تحميل البيانات: ' + err.message);
+                logout();
             }
         }
 
-        // --- دوال الإدارة (الأدمن) ---
+        // --- الإدارة (مراقبة كاملة) ---
         async function loadAdminData() {
-            let { data: users } = await supabaseClient.from('profiles').select('*');
-            document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
-                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
-                    <b>${u.full_name}</b> <span class="text-gray-500">(${u.role})</span><br>
-                    📞 ${u.phone || 'لا يوجد'}
-                    ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 hover:bg-green-600 text-white py-1 rounded text-xs font-bold">✅ موافقة السائق</button>` : ''}
-                </div>
-            `).join('');
-
-            let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
-            document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => `
-                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm">
-                    <div class="flex justify-between font-bold">
-                        <span>${o.cargo_type}</span>
-                        <span class="text-yellow-600">${formatMoney(o.price)}</span>
+            try {
+                let { data: users } = await supabaseClient.from('profiles').select('*');
+                document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
+                    <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
+                        <b>${u.full_name}</b> (${u.role})<br>
+                        📞 <a href="tel:${u.phone}" class="text-blue-600 font-bold">${u.phone}</a><br>
+                        المحفظة: ${formatMoney(u.wallet_balance)}
+                        ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 hover:bg-green-600 text-white py-1 rounded text-xs font-bold">✅ موافقة السائق</button>` : ''}
                     </div>
-                    <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
-                    <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
-                </div>
-            `).join('');
+                `).join('');
+
+                let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
+                document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => {
+                    const commission = (o.price * 0.02).toFixed(2); // عمولة 2%
+                    return `
+                    <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
+                        <div class="flex justify-between font-bold">
+                            <span>${o.cargo_type}</span>
+                            <span class="text-yellow-600">${formatMoney(o.price)}</span>
+                        </div>
+                        <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
+                        <p class="text-xs mt-1 font-bold text-blue-600">طريقة الدفع: ${getPaymentText(o.payment_method)}</p>
+                        <p class="text-xs mt-1 font-bold text-red-500">عمولة المنصة (2%): ${formatMoney(commission)}</p>
+                        <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
+                    </div>
+                `}).join('');
+            } catch (err) {
+                console.error(err);
+            }
         }
 
         async function approveDriver(userId) {
             if(!confirm('هل أنت متأكد من اعتماد هذا السائق؟')) return;
-            const { error } = await supabaseClient.from('profiles').update({ approved: true }).eq('id', userId);
-            if(error) return alert('خطأ: ' + error.message);
-            alert('تم اعتماد السائق بنجاح!');
-            loadAdminData();
+            try {
+                await supabaseClient.from('profiles').update({ approved: true }).eq('id', userId);
+                alert('تم اعتماد السائق بنجاح!');
+                loadAdminData();
+            } catch (err) { alert('خطأ'); }
         }
 
-        // --- دوال الخريطة ---
+        // --- الخريطة ---
         function initMap() {
             if (!document.getElementById('map')) return;
             if (map) { map.remove(); map = null; }
-            
             map = L.map('map').setView([selectedLat, selectedLng], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
-            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
             marker = L.marker([selectedLat, selectedLng], {draggable: true}).addTo(map);
-            
-            marker.on('dragend', function (e) {
-                selectedLat = e.target.getLatLng().lat;
-                selectedLng = e.target.getLatLng().lng;
-            });
-            
-            map.on('click', function (e) {
-                marker.setLatLng(e.latlng);
-                selectedLat = e.latlng.lat;
-                selectedLng = e.latlng.lng;
-            });
+            marker.on('dragend', e => { selectedLat = e.target.getLatLng().lat; selectedLng = e.target.getLatLng().lng; });
+            map.on('click', e => { marker.setLatLng(e.latlng); selectedLat = e.latlng.lat; selectedLng = e.latlng.lng; });
         }
 
         function getLocation() {
@@ -273,12 +266,8 @@
             navigator.geolocation.getCurrentPosition(pos => {
                 selectedLat = pos.coords.latitude;
                 selectedLng = pos.coords.longitude;
-                if (map && marker) {
-                    map.setView([selectedLat, selectedLng], 15);
-                    marker.setLatLng([selectedLat, selectedLng]);
-                }
-                alert('تم تحديد موقعك بنجاح ✅');
-            }, () => alert('تعذر تحديد الموقع، تأكد من إعطاء صلاحية الموقع.'));
+                if (map && marker) { map.setView([selectedLat, selectedLng], 15); marker.setLatLng([selectedLat, selectedLng]); }
+            }, () => alert('تعذر تحديد الموقع.'));
         }
 
         function showScreen(id) {
@@ -296,40 +285,43 @@
             showScreen('authScreen');
         }
 
+        // --- العميل ---
         async function createOrder() {
             const pickup = document.getElementById('pickup').value;
             const dropoff = document.getElementById('dropoff').value;
             const vehicle = document.getElementById('vehicle').value;
             const needsLabor = document.getElementById('labor').checked;
+            const paymentMethod = document.getElementById('payment_method').value;
 
             if(!pickup || !dropoff) return alert('ادخل العناوين');
 
             const price = 450 + (needsLabor ? 240 : 0);
             const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-            const { error } = await supabaseClient.from('orders').insert({
-                client_id: currentUser.id,
-                pickup_address: pickup,
-                dropoff_address: dropoff,
-                cargo_type: vehicle,
-                price: price,
-                needs_labor: needsLabor,
-                otp_code: otp,
-                pickup_lat: selectedLat,
-                pickup_lng: selectedLng
-            });
+            try {
+                const { error } = await supabaseClient.from('orders').insert({
+                    client_id: currentUser.id,
+                    pickup_address: pickup,
+                    dropoff_address: dropoff,
+                    cargo_type: vehicle,
+                    price: price,
+                    needs_labor: needsLabor,
+                    otp_code: otp,
+                    pickup_lat: selectedLat,
+                    pickup_lng: selectedLng,
+                    payment_method: paymentMethod
+                });
 
-            if(error) return alert('حدث خطأ: ' + error.message);
-            alert('تم إرسال الطلب بنجاح!\nكود التسليم الخاص بك: ' + otp);
-            
-            document.getElementById('pickup').value = '';
-            document.getElementById('dropoff').value = '';
-            renderClientOrders();
+                if(error) throw error;
+                alert('تم إرسال الطلب بنجاح!\nكود التسليم الخاص بك: ' + otp);
+                document.getElementById('pickup').value = '';
+                document.getElementById('dropoff').value = '';
+                renderClientOrders();
+            } catch (err) { alert('خطأ: ' + err.message); }
         }
 
         async function renderClientOrders() {
             let { data: orders } = await supabaseClient.from('orders').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
-            
             document.getElementById('clientOrders').innerHTML = (orders || []).map(o => `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 ${o.status === 'pending' ? 'border-yellow-500' : o.status === 'delivered' ? 'border-green-500' : 'border-blue-500'}">
                     <div class="flex justify-between">
@@ -338,74 +330,84 @@
                     </div>
                     <p class="text-sm mt-2 text-gray-600">📍 من: ${o.pickup_address} <br> 🏁 إلى: ${o.dropoff_address}</p>
                     <p class="font-bold mt-2 text-yellow-600">${formatMoney(o.price)}</p>
-                    ${o.status === 'pending' ? '<p class="text-xs text-gray-500 mt-2">⏳ جاري البحث عن سائق...</p>' : ''}
+                    <p class="text-xs text-blue-600 font-bold">الدفع: ${getPaymentText(o.payment_method)}</p>
                 </div>
             `).join('') || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات</p>';
         }
 
+        // --- السائق ---
         async function renderDriverOrders() {
             let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
-            
-            document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => `
+            document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => {
+                const netEarnings = (o.price * 0.98).toFixed(2); // خصم 2%
+                return `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 border-blue-500">
                     <p class="font-bold text-gray-800">${o.pickup_address} ➡️ ${o.dropoff_address}</p>
                     <p class="text-sm text-gray-500 mt-1">الحالة: ${getStatusText(o.status)}</p>
-                    <p class="font-bold text-yellow-600 mt-2">${formatMoney(o.price)}</p>
+                    <p class="font-bold text-yellow-600 mt-2">السعر: ${formatMoney(o.price)}</p>
+                    <p class="font-bold text-green-600 text-sm">صافي أرباحك: ${formatMoney(netEarnings)}</p>
                     ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تأكيد استلام الشحنة</button>` : ''}
-                    ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تسليم وإنهاء الرحلة</button>` : ''}
+                    ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}', '${netEarnings}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تسليم وإنهاء الرحلة</button>` : ''}
                 </div>
-            `).join('') || '<p class="text-gray-500 text-center text-sm mb-4">لا يوجد رحلات جارية</p>';
+            `}).join('') || '<p class="text-gray-500 text-center text-sm mb-4">لا يوجد رحلات جارية</p>';
 
             let { data: pendingOrders } = await supabaseClient.from('orders').select('*').eq('status', 'pending');
-            
-            document.getElementById('driverPendingOrders').innerHTML = (pendingOrders || []).map(o => `
+            document.getElementById('driverPendingOrders').innerHTML = (pendingOrders || []).map(o => {
+                const netEarnings = (o.price * 0.98).toFixed(2);
+                return `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3">
                     <p class="font-bold text-gray-800 text-sm">📍 ${o.pickup_address} <br> 🏁 ${o.dropoff_address}</p>
-                    <p class="text-yellow-600 font-bold my-2">${formatMoney(o.price)}</p>
+                    <p class="text-yellow-600 font-bold my-2">السعر: ${formatMoney(o.price)}</p>
+                    <p class="text-green-600 font-bold text-sm mb-2">صافي أرباحك: ${formatMoney(netEarnings)}</p>
                     <button onclick="acceptOrder('${o.id}')" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-bold">قبول الطلب</button>
                 </div>
-            `).join('') || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات متاحة حالياً</p>';
+            `}).join('') || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات متاحة حالياً</p>';
         }
 
         async function acceptOrder(id) {
             if(!confirm('هل أنت متأكد من قبول الرحلة؟')) return;
-            await supabaseClient.from('orders').update({ status: 'accepted', driver_id: currentUser.id }).eq('id', id);
-            renderDriverOrders();
+            try {
+                await supabaseClient.from('orders').update({ status: 'accepted', driver_id: currentUser.id }).eq('id', id);
+                renderDriverOrders();
+            } catch (err) { alert('خطأ'); }
         }
 
         async function updateOrder(id, status) {
-            await supabaseClient.from('orders').update({ status: status }).eq('id', id);
-            renderDriverOrders();
+            try {
+                await supabaseClient.from('orders').update({ status: status }).eq('id', id);
+                renderDriverOrders();
+            } catch (err) { alert('خطأ'); }
         }
 
-        // هنا التعديل الأمني الجديد
-        async function deliverOrder(id) {
+        async function deliverOrder(id, netEarnings) {
             const otp = prompt('أدخل كود التسليم المكون من 4 أرقام:');
             if(!otp) return;
             
-            // استدعاء الدالة الآمنة من السيرفر بدلاً من قراءة الكود مباشرة
-            const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', {
-                p_order_id: id,
-                p_otp: otp
-            });
-            
-            if(error) return alert('حدث خطأ: ' + error.message);
-            if(!isValid) return alert('كود خاطئ!');
+            try {
+                const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
+                if(error) throw error;
+                if(!isValid) return alert('كود خاطئ!');
 
-            await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
-            alert('تم التسليم بنجاح!');
-            
-            let newBalance = Number(currentProfile.wallet_balance) + 450;
-            await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
-            currentProfile.wallet_balance = newBalance;
-            document.getElementById('driverWallet').innerText = formatMoney(newBalance);
-            
-            renderDriverOrders();
+                await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
+                alert('تم التسليم بنجاح! تمت إضافة الأرباح لمحفظتك.');
+                
+                let newBalance = Number(currentProfile.wallet_balance) + Number(netEarnings);
+                await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
+                currentProfile.wallet_balance = newBalance;
+                document.getElementById('driverWallet').innerText = formatMoney(newBalance);
+                
+                renderDriverOrders();
+            } catch (err) { alert('خطأ: ' + err.message); }
         }
 
+        // دوال مساعدة
         function getStatusText(status) {
-            const s = { pending: 'انتظار', accepted: 'تم القبول', picked_up: 'جاري النقل', delivered: 'تم التسليم', cancelled: 'ملغي' };
+            const s = { pending: 'انتظار', accepted: 'تم القبول', picked_up: 'جاري النقل', delivered: 'تم التسليم' };
             return s[status] || status;
+        }
+        function getPaymentText(method) {
+            const m = { cash: 'كاش', instapay: 'إنستا باي', visa: 'فيزا' };
+            return m[method] || 'كاش';
         }
 
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
