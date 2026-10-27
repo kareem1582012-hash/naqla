@@ -35,6 +35,7 @@
 
     <main class="max-w-md mx-auto p-4">
         
+        <!-- شاشة الدخول -->
         <div id="authScreen" class="hide bg-white p-6 rounded-2xl shadow-lg mt-10">
             <h2 class="text-2xl font-bold text-center mb-6">دخول / حساب جديد</h2>
             <input type="email" id="email" placeholder="البريد الإلكتروني" class="w-full p-3 border rounded-lg mb-3" dir="ltr">
@@ -48,6 +49,7 @@
             <button onclick="handleAuth()" id="authBtn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg transition">دخول</button>
         </div>
 
+        <!-- شاشة انتظار الموافقة -->
         <div id="approvalScreen" class="hide text-center bg-white p-6 rounded-2xl shadow-lg mt-10">
             <div class="text-5xl mb-4">⏳</div>
             <h2 class="text-xl font-bold text-red-600 mb-4">حسابك قيد المراجعة</h2>
@@ -110,6 +112,7 @@
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
             </div>
 
+            <!-- إحصائيات الإدارة -->
             <div class="grid grid-cols-2 gap-2 mb-4">
                 <div class="bg-white p-3 rounded-xl shadow-sm border-r-4 border-blue-500">
                     <p class="text-xs text-gray-500">إجمالي الطلبات</p>
@@ -168,6 +171,7 @@
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
+        // تفعيل الصوت
         function enableSound() {
             document.getElementById('notificationSound').play()
                 .then(() => {
@@ -396,19 +400,16 @@
 
         // --- السائق ---
         async function requestPayout() {
-            const method = prompt('اختر طريقة السحب (اكتب: فودافون كاش أو إنستاباي):');
-            if(!method) return;
-            if (method !== 'فودافون كاش' && method !== 'إنستاباي') return alert('يرجى كتابة "فودافون كاش" أو "إنستاباي" فقط.');
+            const isVodafone = confirm('اختر طريقة السحب:\nاضغط "موافق" (OK) لـ فودافون كاش.\nاضغط "إلغاء" (Cancel) لـ إنستاباي.');
+            let method = isVodafone ? 'فودافون كاش' : 'إنستاباي';
 
             const amount = prompt(`أدخل المبلغ اللي عايز تسحبه (رصيدك الحالي: ${currentProfile.wallet_balance}):`);
             if(!amount || isNaN(amount) || amount <= 0) return;
             if (Number(amount) > currentProfile.wallet_balance) return alert('المبلغ أكبر من رصيدك المتاح!');
 
-            // خصم المبلغ من المحفظة فوراً
             let newBalance = Number(currentProfile.wallet_balance) - Number(amount);
             await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
             
-            // إرسال الطلب للإدارة
             await supabaseClient.from('payout_requests').insert({
                 driver_id: currentUser.id,
                 amount: Number(amount),
@@ -547,9 +548,10 @@
             let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
             let safeOrders = orders || [];
 
+            // حساب الإحصائيات مع خصم 5%
             let totalOrders = safeOrders.length;
             let totalRevenue = safeOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
-            let commission = totalRevenue * 0.05;
+            let commission = totalRevenue * 0.05; // 5%
 
             document.getElementById('statTotalOrders').innerText = totalOrders;
             document.getElementById('statTotalRevenue').innerText = formatMoney(totalRevenue);
