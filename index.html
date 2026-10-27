@@ -35,7 +35,6 @@
 
     <main class="max-w-md mx-auto p-4">
         
-        <!-- شاشة الدخول -->
         <div id="authScreen" class="hide bg-white p-6 rounded-2xl shadow-lg mt-10">
             <h2 class="text-2xl font-bold text-center mb-6">دخول / حساب جديد</h2>
             <input type="email" id="email" placeholder="البريد الإلكتروني" class="w-full p-3 border rounded-lg mb-3" dir="ltr">
@@ -49,13 +48,11 @@
             <button onclick="handleAuth()" id="authBtn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg transition">دخول</button>
         </div>
 
-        <!-- شاشة انتظار الموافقة -->
         <div id="approvalScreen" class="hide text-center bg-white p-6 rounded-2xl shadow-lg mt-10">
             <div class="text-5xl mb-4">⏳</div>
             <h2 class="text-xl font-bold text-red-600 mb-4">حسابك قيد المراجعة</h2>
         </div>
 
-        <!-- واجهة العميل -->
         <div id="clientScreen" class="hide">
             <div class="bg-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
@@ -84,23 +81,22 @@
             <div id="clientOrders"></div>
         </div>
 
-        <!-- واجهة السائق -->
         <div id="driverScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
                     <p class="text-gray-400 text-sm">صافي الأرباح</p>
                     <p class="text-2xl font-bold text-yellow-500" id="driverWallet">0 ج.م</p>
                 </div>
+                <button onclick="renderDriverOrders()" class="bg-gray-700 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">🔄 تحديث</button>
             </div>
 
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">رحلاتي الحالية</h3>
             <div id="driverMyOrders"></div>
 
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">طلبات متاحة</h3>
-            <div id="driverPendingOrders"></div>
+            <div id="driverPendingOrders" class="pb-10"></div>
         </div>
 
-        <!-- واجهة الأدمن -->
         <div id="adminScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
@@ -136,10 +132,10 @@
         let driverMap = null, driverRouting = null;
         let selectedLat = 30.0444, selectedLng = 31.2357;
         let watchId = null;
+        let driverPollingInterval = null; // متغير للتحديث التلقائي
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
-        // دالة الدخول
         async function handleAuth() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -179,7 +175,6 @@
             }
         }
 
-        // تحميل واجهة المستخدم
         async function loadApp(user) {
             if(!user) return showScreen('authScreen');
             currentUser = user;
@@ -208,6 +203,10 @@
                         document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
                         showScreen('driverScreen');
                         renderDriverOrders();
+                        
+                        // تشغيل التحديث التلقائي كل 10 ثواني عشان يشوف الطلبات الجديدة
+                        if (driverPollingInterval) clearInterval(driverPollingInterval);
+                        driverPollingInterval = setInterval(renderDriverOrders, 10000);
                     }
                 } else if(data.role === 'admin') {
                     showScreen('adminScreen');
@@ -216,12 +215,10 @@
             } catch (err) { showScreen('authScreen'); }
         }
 
-        // --- شحن المحفظة (محاكاة) ---
         async function topUpWallet() {
             const amount = prompt('أدخل المبلغ اللي عايز تشحنه (بالجنيه):');
             if(!amount || isNaN(amount) || amount <= 0) return;
             
-            // محاكاة الدفع
             const confirmPay = confirm(`هل أنت متأكد من دفع ${amount} ج.م بالفيزا/فوري؟ (محاكاة)`);
             if(!confirmPay) return;
 
@@ -233,14 +230,12 @@
             alert('تم شحن المحفظة بنجاح! ✅');
         }
 
-        // --- التقييم بالنجوم ---
         async function submitRating(orderId, stars) {
             await supabaseClient.from('orders').update({ rating: stars }).eq('id', orderId);
             alert('شكراً لتقييمك! ⭐');
             renderClientOrders();
         }
 
-        // --- خريطة العميل ---
         function initClientMap() {
             if (!document.getElementById('map')) return;
             if (map) { map.remove(); map = null; }
@@ -260,7 +255,6 @@
 
             const price = 450; 
             
-            // خصم من المحفظة لو اختار كده
             if (payMethod === 'wallet') {
                 if (currentProfile.wallet_balance < price) return alert('رصيد المحفظة لا يكفي! يرجى الشحن أولاً.');
                 let newBalance = currentProfile.wallet_balance - price;
@@ -289,7 +283,6 @@
             for (let o of (orders || [])) {
                 let mapDiv = o.status === 'accepted' || o.status === 'picked_up' ? `<div id="clientOrderMap_${o.id}" class="mt-2" style="height:200px;"></div>` : '';
                 
-                // نظام التقييم
                 let ratingHtml = '';
                 if (o.status === 'delivered' && !o.rating) {
                     ratingHtml = `
@@ -351,19 +344,42 @@
 
         // --- السائق ---
         async function renderDriverOrders() {
-            let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
-            
-            document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => `
-                <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 border-blue-500">
-                    <p class="font-bold text-gray-800">${o.pickup_address} ➡️ ${o.dropoff_address}</p>
-                    <p class="text-sm text-gray-500 mt-1">الحالة: ${getStatusText(o.status)}</p>
-                    <div id="driverMap_${o.id}" class="mt-2" style="height: 200px;"></div>
-                    ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg font-bold">تأكيد الاستلام</button>` : ''}
-                    ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg font-bold">تسليم</button>` : ''}
-                </div>
-            `).join('') || '<p class="text-gray-500 text-center">لا يوجد رحلات</p>';
+            try {
+                let { data: myOrders, error: err1 } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
+                if(err1) throw err1;
+                
+                document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => `
+                    <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 border-blue-500">
+                        <p class="font-bold text-gray-800">${o.pickup_address} ➡️ ${o.dropoff_address}</p>
+                        <p class="text-sm text-gray-500 mt-1">الحالة: ${getStatusText(o.status)}</p>
+                        <div id="driverMap_${o.id}" class="mt-2" style="height: 200px;"></div>
+                        ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg font-bold">تأكيد الاستلام</button>` : ''}
+                        ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg font-bold">تسليم</button>` : ''}
+                    </div>
+                `).join('') || '<p class="text-gray-500 text-center">لا يوجد رحلات</p>';
 
-            (myOrders || []).forEach(o => drawDriverRoute(o));
+                (myOrders || []).forEach(o => drawDriverRoute(o));
+
+                let { data: pendingOrders, error: err2 } = await supabaseClient.from('orders').select('*').eq('status', 'pending');
+                if(err2) throw err2;
+                
+                let filteredOrders = pendingOrders || [];
+                
+                document.getElementById('driverPendingOrders').innerHTML = filteredOrders.map(o => {
+                    const netEarnings = (o.price * 0.98).toFixed(2);
+                    return `
+                    <div class="bg-white p-4 rounded-xl shadow-sm mb-3">
+                        <p class="font-bold text-gray-800 text-sm">📍 ${o.pickup_address} <br> 🏁 ${o.dropoff_address}</p>
+                        <p class="text-yellow-600 font-bold my-2">السعر: ${formatMoney(o.price)}</p>
+                        <p class="text-green-600 font-bold text-sm mb-2">صافي أرباحك: ${formatMoney(netEarnings)}</p>
+                        <button onclick="acceptOrder('${o.id}')" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-bold">قبول الطلب</button>
+                    </div>
+                `}).join('') || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات متاحة حالياً</p>';
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('driverPendingOrders').innerHTML = '<p class="text-red-500 text-center text-sm">حدث خطأ في جلب الطلبات. جرب التحديث.</p>';
+            }
         }
 
         async function drawDriverRoute(order) {
@@ -395,6 +411,7 @@
         async function acceptOrder(id) {
             if(!confirm('قبول الرحلة؟')) return;
             await supabaseClient.from('orders').update({ status: 'accepted', driver_id: currentUser.id }).eq('id', id);
+            if (driverPollingInterval) clearInterval(driverPollingInterval); // وقف التحديث التلقائي عشان الخريطة متتلخبطش
             renderDriverOrders();
         }
 
@@ -417,6 +434,11 @@
             await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
             currentProfile.wallet_balance = newBalance;
             document.getElementById('driverWallet').innerText = formatMoney(newBalance);
+            
+            // رجع التحديث التلقائي بعد التسليم
+            if (driverPollingInterval) clearInterval(driverPollingInterval);
+            driverPollingInterval = setInterval(renderDriverOrders, 10000);
+            
             renderDriverOrders();
         }
 
@@ -501,6 +523,7 @@
 
         async function logout() {
             if (watchId) navigator.geolocation.clearWatch(watchId);
+            if (driverPollingInterval) clearInterval(driverPollingInterval);
             await supabaseClient.auth.signOut();
             location.reload();
         }
