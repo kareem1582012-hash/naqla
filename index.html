@@ -17,7 +17,9 @@
     <style>
         body { font-family: 'Cairo', sans-serif; background-color: #f3f4f6; padding-bottom: 80px; }
         .hide { display: none !important; }
-        #map, #driverMap, #clientOrderMap, #adminLiveMap { height: 250px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
+        #map, #driverMap, #clientOrderMap, #adminLiveMap { height: 220px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
+        /* إصلاح شكل أيقونة الخريطة */
+        .custom-truck-icon { font-size: 24px; text-align: center; line-height: 24px; }
     </style>
 </head>
 <body>
@@ -63,8 +65,8 @@
 
             <div class="bg-white p-5 rounded-2xl shadow-sm mb-4">
                 <h3 class="font-bold text-lg mb-4 text-gray-800">طلب شحنة جديدة</h3>
-                <input type="text" id="pickup" placeholder="عنوان التحميل (مثال: مدينة نصر)" class="w-full p-2 border rounded-lg mb-2">
-                <input type="text" id="dropoff" placeholder="عنوان التسليم (مثال: التجمع الخامس)" class="w-full p-2 border rounded-lg mb-2">
+                <input type="text" id="pickup" placeholder="عنوان التحميل" class="w-full p-2 border rounded-lg mb-2">
+                <input type="text" id="dropoff" placeholder="عنوان التسليم" class="w-full p-2 border rounded-lg mb-2">
                 <select id="payment_method" class="w-full p-2 border rounded-lg mb-2 bg-gray-50 font-bold text-blue-700">
                     <option value="cash">💵 الدفع نقداً (كاش)</option>
                     <option value="instapay">📱 إنستا باي (InstaPay)</option>
@@ -72,7 +74,7 @@
                 </select>
                 
                 <div id="map"></div>
-                <p class="text-xs text-gray-500 mb-2">📍 دوس على الخريطة لتحديد مكان التحميل بدقة</p>
+                <p class="text-xs text-gray-500 mb-2">📍 دوس على الخريطة لتحديد مكان التحميل</p>
 
                 <button onclick="createOrder()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg mt-2">تأكيد الطلب</button>
             </div>
@@ -103,9 +105,11 @@
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
             </div>
             
-            <!-- تتبع مباشر للأدمن -->
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">تتبع الشحنات النشطة لحظياً</h3>
-            <div id="adminLiveTracking"></div>
+            <!-- قسم التتبع المباشر -->
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-blue-500">
+                <h3 class="font-bold text-lg mb-2 text-blue-800">تتبع الشحنات النشطة لحظياً 📍</h3>
+                <div id="adminLiveTracking"></div>
+            </div>
 
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين</h3>
             <div id="adminUsersList" class="mb-6"></div>
@@ -130,12 +134,8 @@
         
         let map = null, marker = null;
         let driverMap = null, driverRouting = null;
-        let clientOrderMap = null, clientRouting = null, liveDriverMarker = null;
+        let clientOrderMap = null, clientRouting = null;
         
-        // متغيرات الأدمن
-        let adminMaps = {}; 
-        let adminMarkers = {};
-
         let selectedLat = 30.0444, selectedLng = 31.2357;
         let watchId = null;
 
@@ -206,7 +206,6 @@
             } catch (err) { showScreen('authScreen'); }
         }
 
-        // --- خريطة العميل ---
         function initClientMap() {
             if (!document.getElementById('map')) return;
             if (map) { map.remove(); map = null; }
@@ -242,7 +241,6 @@
             let html = '';
             for (let o of (orders || [])) {
                 let mapDiv = o.status === 'accepted' || o.status === 'picked_up' ? `<div id="clientOrderMap_${o.id}" class="mt-2" style="height:200px;"></div>` : '';
-                
                 html += `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 ${o.status === 'pending' ? 'border-yellow-500' : o.status === 'delivered' ? 'border-green-500' : 'border-blue-500'}">
                     <div class="flex justify-between">
@@ -255,7 +253,6 @@
                 </div>`;
             }
             document.getElementById('clientOrders').innerHTML = html || '<p class="text-gray-500 text-center">لا يوجد طلبات</p>';
-
             (orders || []).forEach(o => { if (o.status === 'accepted' || o.status === 'picked_up') initClientLiveTracking(o); });
         }
 
@@ -270,7 +267,7 @@
                 
                 let dMarker = null;
                 if (order.driver_lat && order.driver_lng) {
-                    dMarker = L.marker([order.driver_lat, order.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(cMap).bindPopup('السائق');
+                    dMarker = L.marker([order.driver_lat, order.driver_lng], { icon: L.divIcon({ className: 'custom-truck-icon', html: '🚚', iconSize: [30,30], iconAnchor: [15,15] }) }).addTo(cMap).bindPopup('السائق');
                 }
 
                 supabaseClient.channel('client_track_' + order.id)
@@ -281,14 +278,13 @@
                               dMarker.setLatLng([newOrder.driver_lat, newOrder.driver_lng]);
                               cMap.panTo([newOrder.driver_lat, newOrder.driver_lng]);
                           } else {
-                              dMarker = L.marker([newOrder.driver_lat, newOrder.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(cMap);
+                              dMarker = L.marker([newOrder.driver_lat, newOrder.driver_lng], { icon: L.divIcon({ className: 'custom-truck-icon', html: '🚚', iconSize: [30,30], iconAnchor: [15,15] }) }).addTo(cMap);
                           }
                       }
                   }).subscribe();
             }, 500);
         }
 
-        // --- واجهة السائق ---
         async function renderDriverOrders() {
             let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
             
@@ -314,10 +310,9 @@
                 driverMap = L.map(el).setView([order.pickup_lat, order.pickup_lng], 12);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(driverMap);
 
-                let start, end;
                 navigator.geolocation.getCurrentPosition(pos => {
-                    start = [pos.coords.latitude, pos.coords.longitude];
-                    end = [order.pickup_lat, order.pickup_lng];
+                    let start = [pos.coords.latitude, pos.coords.longitude];
+                    let end = [order.pickup_lat, order.pickup_lng];
                     if (driverRouting) driverMap.removeControl(driverRouting);
                     driverRouting = L.Routing.control({
                         waypoints: [L.latLng(start), L.latLng(end)],
@@ -360,7 +355,6 @@
             renderDriverOrders();
         }
 
-        // --- لوحة الأدمن (مع التتبع) ---
         async function loadAdminData() {
             let { data: users } = await supabaseClient.from('profiles').select('*');
             document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
@@ -372,17 +366,21 @@
 
             let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
             
-            // 1. رسم الطلبات النشطة
             let activeOrders = (orders || []).filter(o => o.status === 'accepted' || o.status === 'picked_up');
-            let liveHtml = activeOrders.map(o => `
-                <div class="bg-white p-3 rounded-lg shadow-sm mb-3 border-r-4 border-blue-500">
-                    <p class="font-bold text-sm">شحنة #${o.id.slice(0,4)} - من ${o.pickup_address}</p>
-                    <div id="adminLiveMap_${o.id}" style="height: 200px; border-radius: 8px; margin-top: 8px;"></div>
-                </div>
-            `).join('');
-            document.getElementById('adminLiveTracking').innerHTML = liveHtml || '<p class="text-gray-500 text-sm mb-4">لا يوجد شحنات نشطة حالياً</p>';
+            
+            if (activeOrders.length > 0) {
+                let liveHtml = activeOrders.map(o => `
+                    <div class="bg-gray-50 p-3 rounded-lg shadow-sm mb-3 border border-blue-200">
+                        <p class="font-bold text-sm text-blue-800">شحنة #${o.id.slice(0,4)} (${o.status === 'accepted' ? 'في الطريق للتحميل' : 'جاري النقل'})</p>
+                        <div id="adminLiveMap_${o.id}" style="height: 200px; border-radius: 8px; margin-top: 8px; z-index:1;"></div>
+                    </div>
+                `).join('');
+                document.getElementById('adminLiveTracking').innerHTML = liveHtml;
+                activeOrders.forEach(o => initAdminLiveTracking(o));
+            } else {
+                document.getElementById('adminLiveTracking').innerHTML = '<p class="text-gray-500 text-sm">لا يوجد شحنات نشطة حالياً (لا توجد خرائط للعرض)</p>';
+            }
 
-            // 2. سجل الطلبات العادي
             document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => `
                 <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
                     <div class="flex justify-between font-bold"><span>${o.cargo_type}</span><span class="text-yellow-600">${formatMoney(o.price)}</span></div>
@@ -391,9 +389,6 @@
                     <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
                 </div>
             `).join('');
-
-            // 3. تشغيل الخرائط الحية للأدمن
-            activeOrders.forEach(o => initAdminLiveTracking(o));
         }
 
         function initAdminLiveTracking(order) {
@@ -407,10 +402,9 @@
                 
                 let dMarker = null;
                 if (order.driver_lat && order.driver_lng) {
-                    dMarker = L.marker([order.driver_lat, order.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(aMap).bindPopup('السائق');
+                    dMarker = L.marker([order.driver_lat, order.driver_lng], { icon: L.divIcon({ className: 'custom-truck-icon', html: '🚚', iconSize: [30,30], iconAnchor: [15,15] }) }).addTo(aMap).bindPopup('السائق');
                 }
 
-                // استماع لحظي للأدمن
                 supabaseClient.channel('admin_track_' + order.id)
                   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${order.id}` }, payload => {
                       let newOrder = payload.new;
@@ -419,7 +413,7 @@
                               dMarker.setLatLng([newOrder.driver_lat, newOrder.driver_lng]);
                               aMap.panTo([newOrder.driver_lat, newOrder.driver_lng]);
                           } else {
-                              dMarker = L.marker([newOrder.driver_lat, newOrder.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(aMap);
+                              dMarker = L.marker([newOrder.driver_lat, newOrder.driver_lng], { icon: L.divIcon({ className: 'custom-truck-icon', html: '🚚', iconSize: [30,30], iconAnchor: [15,15] }) }).addTo(aMap);
                           }
                       }
                   }).subscribe();
