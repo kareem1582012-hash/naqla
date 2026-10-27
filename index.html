@@ -6,7 +6,7 @@
     <title>مسار | MASAR</title>
     <link rel="manifest" href="manifest.json?v=3">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -20,23 +20,9 @@
 <body>
 
     <header class="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-md">
-        <div class="flex items-center gap-2">
-            <!-- اللوجو الجديد الصغير -->
-            <svg viewBox="0 0 512 512" width="30" height="30" xmlns="http://www.w3.org/2000/svg">
-                <rect width="512" height="512" rx="100" fill="#111827" />
-                <path d="M 120 250 C 180 120, 330 400, 390 260" fill="none" stroke="#374151" stroke-width="12" stroke-dasharray="16 16" stroke-linecap="round"/>
-                <text x="256" y="310" font-family="'Poppins', sans-serif" font-weight="800" font-size="220" fill="#FFFFFF" text-anchor="middle" letter-spacing="-5">M</text>
-                <g transform="translate(120, 170)">
-                    <path d="M 20 0 C 8 0 0 8 0 20 C 0 35 20 50 20 50 C 20 50 40 35 40 20 C 40 8 32 0 20 0 Z" fill="#F59E0B"/>
-                    <circle cx="20" cy="20" r="7" fill="#111827"/>
-                </g>
-                <g transform="translate(360, 270)">
-                    <rect x="0" y="10" width="28" height="20" rx="4" fill="#F59E0B"/>
-                    <rect x="28" y="18" width="14" height="12" rx="2" fill="#F59E0B"/>
-                    <circle cx="8" cy="32" r="6" fill="#111827" stroke="#F59E0B" stroke-width="3"/>
-                    <circle cx="34" cy="32" r="6" fill="#111827" stroke="#F59E0B" stroke-width="3"/>
-                </g>
-            </svg>
+        <div class="flex items-center gap-3">
+            <!-- لوجو بسيط وشيك -->
+            <div class="bg-yellow-500 text-black font-black text-xl rounded-lg w-10 h-10 flex items-center justify-center">M</div>
             <h1 class="text-xl font-bold">مسار <span class="text-yellow-500 text-sm">MASAR</span></h1>
         </div>
         <button onclick="logout()" id="logoutBtn" class="hide text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">خروج</button>
@@ -113,7 +99,6 @@
                 </div>
             </div>
 
-            <!-- قسم أقرب الشحنات ورحلة العودة -->
             <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-blue-500">
                 <h3 class="font-bold text-blue-800 mb-2">🔍 ابحث عن شحنة (رحلة العودة)</h3>
                 <p class="text-xs text-gray-500 mb-2">اختار محافظة الوصول عشان التطبيق يجيبلك شحنات رايحة هناك بدل ما ترجع فاضي.</p>
@@ -157,7 +142,6 @@
 
     </main>
 
-    <!-- زرار واتساب خدمة العملاء -->
     <a href="https://wa.me/201008781263?text=مرحباً%20أحتاج%20مساعدة%20في%20تطبيق%20مسار" target="_blank" class="fixed bottom-4 left-4 bg-green-500 text-white p-4 rounded-full shadow-lg z-50 flex items-center justify-center hover:bg-green-600 transition">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
     </a>
@@ -221,9 +205,24 @@
             currentUser = user;
             
             try {
-                let { data, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+                // استخدمنا maybeSingle عشان ميعملش كراش لو الحساب مش موجود
+                let { data, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).maybeSingle();
                 if (error) throw error;
                 
+                // لو الحساب مش موجود، نعمله أوتوماتيك
+                if (!data) {
+                    const { data: newProfile, error: insertError } = await supabaseClient.from('profiles').insert({
+                        id: user.id,
+                        full_name: user.email.split('@')[0],
+                        role: 'client',
+                        wallet_balance: 2500,
+                        approved: true
+                    }).select().single();
+                    
+                    if (insertError) throw insertError;
+                    data = newProfile;
+                }
+
                 currentProfile = data;
                 document.getElementById('logoutBtn').classList.remove('hide');
                 
@@ -245,8 +244,9 @@
                     loadAdminData();
                 }
             } catch (err) {
-                alert('خطأ في تحميل البيانات: ' + err.message);
-                logout();
+                console.error(err);
+                // في حالة حدوث أي خطأ، نظهر شاشة الدخول عشان ميتعلقش
+                showScreen('authScreen');
             }
         }
 
@@ -273,31 +273,35 @@
         }
 
         async function loadAdminData() {
-            let { data: users } = await supabaseClient.from('profiles').select('*');
-            document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
-                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
-                    <b>${u.full_name}</b> (${u.role})<br>
-                    📞 <a href="tel:${u.phone}" class="text-blue-600 font-bold">${u.phone}</a><br>
-                    المحفظة: ${formatMoney(u.wallet_balance)}
-                    ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 hover:bg-green-600 text-white py-1 rounded text-xs font-bold">✅ موافقة السائق</button>` : ''}
-                </div>
-            `).join('');
-
-            let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
-            document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => {
-                const commission = (o.price * 0.02).toFixed(2);
-                return `
-                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
-                    <div class="flex justify-between font-bold">
-                        <span>${o.cargo_type}</span>
-                        <span class="text-yellow-600">${formatMoney(o.price)}</span>
+            try {
+                let { data: users } = await supabaseClient.from('profiles').select('*');
+                document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
+                    <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
+                        <b>${u.full_name}</b> (${u.role})<br>
+                        📞 <a href="tel:${u.phone}" class="text-blue-600 font-bold">${u.phone}</a><br>
+                        المحفظة: ${formatMoney(u.wallet_balance)}
+                        ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 hover:bg-green-600 text-white py-1 rounded text-xs font-bold">✅ موافقة السائق</button>` : ''}
                     </div>
-                    <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
-                    <p class="text-xs mt-1 font-bold text-blue-600">طريقة الدفع: ${getPaymentText(o.payment_method)}</p>
-                    <p class="text-xs mt-1 font-bold text-red-500">عمولة المنصة (2%): ${formatMoney(commission)}</p>
-                    <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
-                </div>
-            `}).join('');
+                `).join('');
+
+                let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
+                document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => {
+                    const commission = (o.price * 0.02).toFixed(2);
+                    return `
+                    <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
+                        <div class="flex justify-between font-bold">
+                            <span>${o.cargo_type}</span>
+                            <span class="text-yellow-600">${formatMoney(o.price)}</span>
+                        </div>
+                        <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
+                        <p class="text-xs mt-1 font-bold text-blue-600">طريقة الدفع: ${getPaymentText(o.payment_method)}</p>
+                        <p class="text-xs mt-1 font-bold text-red-500">عمولة المنصة (2%): ${formatMoney(commission)}</p>
+                        <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
+                    </div>
+                `}).join('');
+            } catch (err) {
+                console.error(err);
+            }
         }
 
         async function approveDriver(userId) {
@@ -331,7 +335,8 @@
                 let el = document.getElementById(s);
                 if(el) el.classList.add('hide');
             });
-            document.getElementById(id).classList.remove('hide');
+            let target = document.getElementById(id);
+            if(target) target.classList.remove('hide');
         }
 
         async function logout() {
@@ -360,4 +365,135 @@
                 cargo_type: vehicle,
                 price: price,
                 needs_labor: needsLabor,
-                o
+                otp_code: otp,
+                pickup_lat: selectedLat,
+                pickup_lng: selectedLng,
+                payment_method: paymentMethod
+            });
+
+            alert('تم إرسال الطلب بنجاح!\nكود التسليم الخاص بك: ' + otp);
+            document.getElementById('pickup').value = '';
+            document.getElementById('dropoff').value = '';
+            renderClientOrders();
+        }
+
+        async function renderClientOrders() {
+            let { data: orders } = await supabaseClient.from('orders').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
+            
+            let ordersHtml = '';
+            for (let o of (orders || [])) {
+                let contactBtn = '';
+                if (o.status === 'accepted' || o.status === 'picked_up') {
+                    let { data: driver } = await supabaseClient.from('profiles').select('phone, full_name').eq('id', o.driver_id).single();
+                    if (driver && driver.phone && driver.phone !== 'غير مسجل') {
+                        let cleanPhone = driver.phone.replace(/\s+/g, '');
+                        let waLink = `https://wa.me/2${cleanPhone}?text=مرحباً%20كابتن%20${driver.full_name}،%20أنا%20صاحب%20الشحنة%20رقم%20${o.id.slice(0,4)}%20من%20${o.pickup_address}`;
+                        contactBtn = `<a href="${waLink}" target="_blank" class="block w-full bg-green-500 hover:bg-green-600 text-white text-center mt-2 py-2 rounded-lg text-sm font-bold">💬 تواصل مع السائق (واتساب)</a>`;
+                    }
+                }
+
+                ordersHtml += `
+                <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 ${o.status === 'pending' ? 'border-yellow-500' : o.status === 'delivered' ? 'border-green-500' : 'border-blue-500'}">
+                    <div class="flex justify-between">
+                        <span class="font-bold text-gray-800">${o.cargo_type}</span>
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">${getStatusText(o.status)}</span>
+                    </div>
+                    <p class="text-sm mt-2 text-gray-600">📍 من: ${o.pickup_address} <br> 🏁 إلى: ${o.dropoff_address}</p>
+                    <p class="font-bold mt-2 text-yellow-600">${formatMoney(o.price)}</p>
+                    <p class="text-xs text-blue-600 font-bold">الدفع: ${getPaymentText(o.payment_method)}</p>
+                    ${contactBtn}
+                </div>`;
+            }
+            document.getElementById('clientOrders').innerHTML = ordersHtml || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات</p>';
+        }
+
+        async function renderDriverOrders() {
+            let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
+            document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => {
+                const netEarnings = (o.price * 0.98).toFixed(2);
+                return `
+                <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 border-blue-500">
+                    <p class="font-bold text-gray-800">${o.pickup_address} ➡️ ${o.dropoff_address}</p>
+                    <p class="text-sm text-gray-500 mt-1">الحالة: ${getStatusText(o.status)}</p>
+                    <p class="font-bold text-yellow-600 mt-2">السعر: ${formatMoney(o.price)}</p>
+                    <p class="font-bold text-green-600 text-sm">صافي أرباحك: ${formatMoney(netEarnings)}</p>
+                    ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تأكيد استلام الشحنة</button>` : ''}
+                    ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}', '${netEarnings}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تسليم وإنهاء الرحلة</button>` : ''}
+                </div>
+            `}).join('') || '<p class="text-gray-500 text-center text-sm mb-4">لا يوجد رحلات جارية</p>';
+
+            let { data: pendingOrders } = await supabaseClient.from('orders').select('*').eq('status', 'pending');
+            
+            let filteredOrders = pendingOrders || [];
+            const returnGov = document.getElementById('return_gov') ? document.getElementById('return_gov').value : '';
+
+            if (returnGov) {
+                filteredOrders = filteredOrders.filter(o => o.dropoff_address.includes(returnGov) || o.dropoff_address.includes(returnGov.replace('ال', '')));
+            }
+
+            if (driverLat && driverLng) {
+                filteredOrders.forEach(o => {
+                    o.distance = calculateDistance(driverLat, driverLng, o.pickup_lat, o.pickup_lng);
+                });
+                filteredOrders.sort((a, b) => a.distance - b.distance);
+            }
+
+            document.getElementById('driverPendingOrders').innerHTML = filteredOrders.map(o => {
+                const netEarnings = (o.price * 0.98).toFixed(2);
+                const distanceText = o.distance ? `<p class="text-xs text-blue-500 font-bold">🚗 يبعد عنك: ${o.distance.toFixed(1)} كم</p>` : '';
+                return `
+                <div class="bg-white p-4 rounded-xl shadow-sm mb-3">
+                    <p class="font-bold text-gray-800 text-sm">📍 ${o.pickup_address} <br> 🏁 ${o.dropoff_address}</p>
+                    ${distanceText}
+                    <p class="text-yellow-600 font-bold my-2">السعر: ${formatMoney(o.price)}</p>
+                    <p class="text-green-600 font-bold text-sm mb-2">صافي أرباحك: ${formatMoney(netEarnings)}</p>
+                    <button onclick="acceptOrder('${o.id}')" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-bold">قبول الطلب</button>
+                </div>
+            `}).join('') || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات متاحة حالياً</p>';
+        }
+
+        async function acceptOrder(id) {
+            if(!confirm('هل أنت متأكد من قبول الرحلة؟')) return;
+            await supabaseClient.from('orders').update({ status: 'accepted', driver_id: currentUser.id }).eq('id', id);
+            renderDriverOrders();
+        }
+
+        async function updateOrder(id, status) {
+            await supabaseClient.from('orders').update({ status: status }).eq('id', id);
+            renderDriverOrders();
+        }
+
+        async function deliverOrder(id, netEarnings) {
+            const otp = prompt('أدخل كود التسليم المكون من 4 أرقام:');
+            if(!otp) return;
+            
+            const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
+            if(error || !isValid) return alert('كود خاطئ!');
+
+            await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
+            alert('تم التسليم بنجاح! تمت إضافة الأرباح لمحفظتك.');
+            
+            let newBalance = Number(currentProfile.wallet_balance) + Number(netEarnings);
+            await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
+            currentProfile.wallet_balance = newBalance;
+            document.getElementById('driverWallet').innerText = formatMoney(newBalance);
+            
+            renderDriverOrders();
+        }
+
+        function getStatusText(status) {
+            const s = { pending: 'انتظار', accepted: 'تم القبول', picked_up: 'جاري النقل', delivered: 'تم التسليم' };
+            return s[status] || status;
+        }
+        function getPaymentText(method) {
+            const m = { cash: 'كاش', instapay: 'إنستا باي', visa: 'فيزا' };
+            return m[method] || 'كاش';
+        }
+
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            if (session) loadApp(session.user);
+            else showScreen('authScreen');
+        });
+    </script>
+</body>
+</html>
