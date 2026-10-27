@@ -82,12 +82,17 @@
         </div>
 
         <div id="driverScreen" class="hide">
+            <audio id="notificationSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
                     <p class="text-gray-400 text-sm">صافي الأرباح</p>
                     <p class="text-2xl font-bold text-yellow-500" id="driverWallet">0 ج.م</p>
                 </div>
-                <button onclick="renderDriverOrders()" class="bg-gray-700 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">🔄 تحديث</button>
+                <div class="flex gap-2">
+                    <button onclick="enableSound()" id="soundBtn" class="bg-yellow-500 text-black px-3 py-1 rounded text-sm font-bold">🔔 تفعيل الصوت</button>
+                    <button onclick="renderDriverOrders()" class="bg-gray-700 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">🔄</button>
+                </div>
             </div>
 
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">رحلاتي الحالية</h3>
@@ -100,6 +105,21 @@
         <div id="adminScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <div class="bg-white p-3 rounded-xl shadow-sm border-r-4 border-blue-500">
+                    <p class="text-xs text-gray-500">إجمالي الطلبات</p>
+                    <p class="text-xl font-bold text-blue-700" id="statTotalOrders">0</p>
+                </div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border-r-4 border-green-500">
+                    <p class="text-xs text-gray-500">إجمالي المبالغ</p>
+                    <p class="text-xl font-bold text-green-700" id="statTotalRevenue">0 ج.م</p>
+                </div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border-r-4 border-red-500 col-span-2">
+                    <p class="text-xs text-gray-500">صافي أرباح المنصة (5%)</p>
+                    <p class="text-xl font-bold text-red-700" id="statPlatformCommission">0 ج.م</p>
+                </div>
             </div>
             
             <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-blue-500">
@@ -133,8 +153,23 @@
         let selectedLat = 30.0444, selectedLng = 31.2357;
         let watchId = null;
         let driverPollingInterval = null;
+        
+        let knownPendingOrders = [];
+        let isSoundEnabled = false;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
+
+        function enableSound() {
+            document.getElementById('notificationSound').play()
+                .then(() => {
+                    isSoundEnabled = true;
+                    document.getElementById('soundBtn').innerText = '✅ الصوت يعمل';
+                    document.getElementById('soundBtn').className = 'bg-green-500 text-white px-3 py-1 rounded text-sm font-bold';
+                })
+                .catch(e => {
+                    alert('لم نتمكن من تفعيل الصوت. تأكد من عدم كتم صوت الهاتف.');
+                });
+        }
 
         async function handleAuth() {
             const email = document.getElementById('email').value;
@@ -205,7 +240,7 @@
                         renderDriverOrders();
                         
                         if (driverPollingInterval) clearInterval(driverPollingInterval);
-                        driverPollingInterval = setInterval(renderDriverOrders, 10000);
+                        driverPollingInterval = setInterval(renderDriverOrders, 15000);
                     }
                 } else if(data.role === 'admin') {
                     showScreen('adminScreen');
@@ -295,7 +330,6 @@
                     ratingHtml = `<p class="text-sm text-yellow-600 font-bold mt-2">تقييمك: ${'★'.repeat(o.rating)}</p>`;
                 }
 
-                // هنا بقى بنعرض كود التسليم للعميل عشان مينساهوش
                 let otpDisplay = '';
                 if (o.status !== 'delivered' && o.status !== 'cancelled') {
                     otpDisplay = `<div class="mt-2 bg-red-50 border border-red-200 p-2 rounded-lg text-center">
@@ -363,7 +397,7 @@
                         <p class="text-sm text-gray-500 mt-1">الحالة: ${getStatusText(o.status)}</p>
                         <div id="driverMap_${o.id}" class="mt-2" style="height: 200px;"></div>
                         ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg font-bold">تأكيد الاستلام</button>` : ''}
-                        ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg font-bold">تسليم</button>` : ''}
+                        ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}', ${o.price})" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg font-bold">تسليم</button>` : ''}
                     </div>
                 `).join('') || '<p class="text-gray-500 text-center">لا يوجد رحلات</p>';
 
@@ -373,9 +407,19 @@
                 if(err2) throw err2;
                 
                 let filteredOrders = pendingOrders || [];
+                let currentPendingIds = filteredOrders.map(o => o.id);
+
+                if (isSoundEnabled && knownPendingOrders.length > 0 && currentPendingIds.length > 0) {
+                    let hasNew = currentPendingIds.some(id => !knownPendingOrders.includes(id));
+                    if (hasNew) {
+                        let audio = document.getElementById('notificationSound');
+                        audio.play().catch(e => console.log('Audio play failed', e));
+                    }
+                }
+                knownPendingOrders = currentPendingIds; 
                 
                 document.getElementById('driverPendingOrders').innerHTML = filteredOrders.map(o => {
-                    const netEarnings = (o.price * 0.98).toFixed(2);
+                    const netEarnings = (o.price * 0.95).toFixed(2); // خصم 5%
                     return `
                     <div class="bg-white p-4 rounded-xl shadow-sm mb-3">
                         <p class="font-bold text-gray-800 text-sm">📍 ${o.pickup_address} <br> 🏁 ${o.dropoff_address}</p>
@@ -429,11 +473,10 @@
             renderDriverOrders();
         }
 
-        async function deliverOrder(id) {
+        async function deliverOrder(id, price) {
             const otp = prompt('أدخل كود التسليم:');
             if(!otp) return;
             
-            // التعديل هنا: نتأكد إن الدالة بترجع true فعلاً
             const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
             
             if(error) return alert('حدث خطأ: ' + error.message);
@@ -443,13 +486,16 @@
             if (watchId) navigator.geolocation.clearWatch(watchId);
             alert('تم التسليم بنجاح!');
             
-            let newBalance = Number(currentProfile.wallet_balance) + 450;
+            // حساب صافي الربح بعد خصم 5%
+            let netEarnings = price * 0.95;
+            let newBalance = Number(currentProfile.wallet_balance) + netEarnings;
+            
             await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
             currentProfile.wallet_balance = newBalance;
             document.getElementById('driverWallet').innerText = formatMoney(newBalance);
             
             if (driverPollingInterval) clearInterval(driverPollingInterval);
-            driverPollingInterval = setInterval(renderDriverOrders, 10000);
+            driverPollingInterval = setInterval(renderDriverOrders, 15000);
             
             renderDriverOrders();
         }
@@ -465,8 +511,18 @@
             `).join('');
 
             let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
-            
-            let activeOrders = (orders || []).filter(o => o.status === 'accepted' || o.status === 'picked_up');
+            let safeOrders = orders || [];
+
+            // حساب الإحصائيات مع خصم 5%
+            let totalOrders = safeOrders.length;
+            let totalRevenue = safeOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
+            let commission = totalRevenue * 0.05; // 5%
+
+            document.getElementById('statTotalOrders').innerText = totalOrders;
+            document.getElementById('statTotalRevenue').innerText = formatMoney(totalRevenue);
+            document.getElementById('statPlatformCommission').innerText = formatMoney(commission);
+
+            let activeOrders = safeOrders.filter(o => o.status === 'accepted' || o.status === 'picked_up');
             
             if (activeOrders.length > 0) {
                 let liveHtml = activeOrders.map(o => `
@@ -481,7 +537,7 @@
                 document.getElementById('adminLiveTracking').innerHTML = '<p class="text-gray-500 text-sm">لا يوجد شحنات نشطة حالياً</p>';
             }
 
-            document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => `
+            document.getElementById('adminOrdersList').innerHTML = safeOrders.map(o => `
                 <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
                     <div class="flex justify-between font-bold"><span>${o.cargo_type}</span><span class="text-yellow-600">${formatMoney(o.price)}</span></div>
                     <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
