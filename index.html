@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-       <link rel="manifest" href="manifest.json">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نقلة | NAQLA</title>
+    <link rel="manifest" href="manifest.json?v=3">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- إضافة ملفات الخريطة -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <style>
         body { font-family: 'Cairo', sans-serif; background-color: #f3f4f6; }
         .hide { display: none !important; }
+        #map { height: 200px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
     </style>
 </head>
 <body class="pb-10">
@@ -61,6 +66,11 @@
                     <input type="checkbox" id="labor" class="w-4 h-4">
                     <label for="labor" class="text-sm font-bold text-gray-700">أحتاج عمال تحميل (+240 ج.م)</label>
                 </div>
+                
+                <!-- الخريطة هنا -->
+                <div id="map"></div>
+                <button onclick="getLocation()" class="w-full bg-blue-500 hover:bg-blue-400 text-white font-bold p-2 rounded-lg mb-3 text-sm">📍 استخدام موقعي الحالي (GPS)</button>
+
                 <button onclick="createOrder()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg mt-2">تأكيد الطلب وتوليد كود التسليم</button>
             </div>
 
@@ -97,6 +107,12 @@
         
         let currentUser = null;
         let currentProfile = null;
+
+        // متغيرات الخريطة
+        let map = null;
+        let marker = null;
+        let selectedLat = 30.0444; // القاهرة افتراضياً
+        let selectedLng = 31.2357;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
@@ -159,11 +175,47 @@
                 document.getElementById('clientWallet').innerText = formatMoney(data.wallet_balance);
                 showScreen('clientScreen');
                 renderClientOrders();
+                setTimeout(initMap, 200); // تشغيل الخريطة بعد ظهور الشاشة
             } else {
                 document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
                 showScreen('driverScreen');
                 renderDriverOrders();
             }
+        }
+
+        // دوال الخريطة
+        function initMap() {
+            if (!document.getElementById('map')) return;
+            if (map) { map.remove(); map = null; }
+            
+            map = L.map('map').setView([selectedLat, selectedLng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
+            
+            marker = L.marker([selectedLat, selectedLng], {draggable: true}).addTo(map);
+            
+            marker.on('dragend', function (e) {
+                selectedLat = e.target.getLatLng().lat;
+                selectedLng = e.target.getLatLng().lng;
+            });
+            
+            map.on('click', function (e) {
+                marker.setLatLng(e.latlng);
+                selectedLat = e.latlng.lat;
+                selectedLng = e.latlng.lng;
+            });
+        }
+
+        function getLocation() {
+            if (!navigator.geolocation) return alert('المتصفح لا يدعم تحديد الموقع');
+            navigator.geolocation.getCurrentPosition(pos => {
+                selectedLat = pos.coords.latitude;
+                selectedLng = pos.coords.longitude;
+                if (map && marker) {
+                    map.setView([selectedLat, selectedLng], 15);
+                    marker.setLatLng([selectedLat, selectedLng]);
+                }
+                alert('تم تحديد موقعك بنجاح ✅');
+            }, () => alert('تعذر تحديد الموقع، تأكد من إعطاء صلاحية الموقع للمتصفح.'));
         }
 
         function showScreen(id) {
@@ -196,7 +248,9 @@
                 cargo_type: vehicle,
                 price: price,
                 needs_labor: needsLabor,
-                otp_code: otp
+                otp_code: otp,
+                pickup_lat: selectedLat,
+                pickup_lng: selectedLng
             });
 
             if(error) return alert('حدث خطأ: ' + error.message);
