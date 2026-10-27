@@ -9,7 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-    <!-- مكتبات الخريطة والمسارات -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
@@ -18,7 +17,7 @@
     <style>
         body { font-family: 'Cairo', sans-serif; background-color: #f3f4f6; padding-bottom: 80px; }
         .hide { display: none !important; }
-        #map, #driverMap, #clientOrderMap { height: 250px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
+        #map, #driverMap, #clientOrderMap, #adminLiveMap { height: 250px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
     </style>
 </head>
 <body>
@@ -103,8 +102,14 @@
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
             </div>
+            
+            <!-- تتبع مباشر للأدمن -->
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">تتبع الشحنات النشطة لحظياً</h3>
+            <div id="adminLiveTracking"></div>
+
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين</h3>
             <div id="adminUsersList" class="mb-6"></div>
+            
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">سجل الطلبات</h3>
             <div id="adminOrdersList"></div>
         </div>
@@ -123,18 +128,19 @@
         let currentUser = null;
         let currentProfile = null;
         
-        // متغيرات الخرائط
         let map = null, marker = null;
         let driverMap = null, driverRouting = null;
         let clientOrderMap = null, clientRouting = null, liveDriverMarker = null;
-        let realtimeChannel = null;
         
+        // متغيرات الأدمن
+        let adminMaps = {}; 
+        let adminMarkers = {};
+
         let selectedLat = 30.0444, selectedLng = 31.2357;
         let watchId = null;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
-        // دالة الدخول
         async function handleAuth() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -166,7 +172,6 @@
             } catch (err) { alert('خطأ: ' + err.message); }
         }
 
-        // تحميل التطبيق
         async function loadApp(user) {
             if(!user) return showScreen('authScreen');
             currentUser = user;
@@ -201,7 +206,7 @@
             } catch (err) { showScreen('authScreen'); }
         }
 
-        // --- خريطة العميل (لتحديد مكان التحميل) ---
+        // --- خريطة العميل ---
         function initClientMap() {
             if (!document.getElementById('map')) return;
             if (map) { map.remove(); map = null; }
@@ -212,13 +217,11 @@
             map.on('click', e => { marker.setLatLng(e.latlng); selectedLat = e.latlng.lat; selectedLng = e.latlng.lng; });
         }
 
-        // إنشاء طلب
         async function createOrder() {
             const pickup = document.getElementById('pickup').value;
             const dropoff = document.getElementById('dropoff').value;
             if(!pickup || !dropoff) return alert('ادخل العناوين');
 
-            // السعر الافتراضي (ممكن نطوره بعدين يتحسب بالمسافة)
             const price = 450; 
             const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -233,7 +236,6 @@
             renderClientOrders();
         }
 
-        // عرض طلبات العميل + التتبع المباشر
         async function renderClientOrders() {
             let { data: orders } = await supabaseClient.from('orders').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
             
@@ -254,15 +256,9 @@
             }
             document.getElementById('clientOrders').innerHTML = html || '<p class="text-gray-500 text-center">لا يوجد طلبات</p>';
 
-            // تهيئة خرائط التتبع للطلبات النشطة
-            (orders || []).forEach(o => {
-                if (o.status === 'accepted' || o.status === 'picked_up') {
-                    initClientLiveTracking(o);
-                }
-            });
+            (orders || []).forEach(o => { if (o.status === 'accepted' || o.status === 'picked_up') initClientLiveTracking(o); });
         }
 
-        // التتبع المباشر للعميل
         async function initClientLiveTracking(order) {
             setTimeout(() => {
                 let el = document.getElementById(`clientOrderMap_${order.id}`);
@@ -270,30 +266,29 @@
 
                 let cMap = L.map(el).setView([order.pickup_lat, order.pickup_lng], 12);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(cMap);
-                
                 L.marker([order.pickup_lat, order.pickup_lng]).addTo(cMap).bindPopup('التحميل');
                 
                 let dMarker = null;
                 if (order.driver_lat && order.driver_lng) {
-                    dMarker = L.marker([order.driver_lat, order.driver_lng], {
-                        icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] })
-                    }).addTo(cMap).bindPopup('السائق');
+                    dMarker = L.marker([order.driver_lat, order.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(cMap).bindPopup('السائق');
                 }
 
-                // الاستماع لتحديثات موقع السائق لحظياً
-                if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
-                realtimeChannel = supabaseClient.channel('custom-all-channel')
+                supabaseClient.channel('client_track_' + order.id)
                   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${order.id}` }, payload => {
                       let newOrder = payload.new;
-                      if (newOrder.driver_lat && newOrder.driver_lng && dMarker) {
-                          dMarker.setLatLng([newOrder.driver_lat, newOrder.driver_lng]);
-                          cMap.panTo([newOrder.driver_lat, newOrder.driver_lng]);
+                      if (newOrder.driver_lat && newOrder.driver_lng) {
+                          if (dMarker) {
+                              dMarker.setLatLng([newOrder.driver_lat, newOrder.driver_lng]);
+                              cMap.panTo([newOrder.driver_lat, newOrder.driver_lng]);
+                          } else {
+                              dMarker = L.marker([newOrder.driver_lat, newOrder.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(cMap);
+                          }
                       }
                   }).subscribe();
             }, 500);
         }
 
-        // --- واجهة السائق والمسارات ---
+        // --- واجهة السائق ---
         async function renderDriverOrders() {
             let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
             
@@ -323,7 +318,6 @@
                 navigator.geolocation.getCurrentPosition(pos => {
                     start = [pos.coords.latitude, pos.coords.longitude];
                     end = [order.pickup_lat, order.pickup_lng];
-                    
                     if (driverRouting) driverMap.removeControl(driverRouting);
                     driverRouting = L.Routing.control({
                         waypoints: [L.latLng(start), L.latLng(end)],
@@ -331,12 +325,9 @@
                     }).addTo(driverMap);
                 });
 
-                // بدء إرسال الموقع للسيرفر كل 10 ثواني
                 if (watchId) navigator.geolocation.clearWatch(watchId);
                 watchId = navigator.geolocation.watchPosition(pos => {
-                    supabaseClient.from('orders').update({
-                        driver_lat: pos.coords.latitude, driver_lng: pos.coords.longitude
-                    }).eq('id', order.id).then();
+                    supabaseClient.from('orders').update({ driver_lat: pos.coords.latitude, driver_lng: pos.coords.longitude }).eq('id', order.id).then();
                 }, null, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
             }, 500);
         }
@@ -355,12 +346,11 @@
         async function deliverOrder(id) {
             const otp = prompt('أدخل كود التسليم:');
             if(!otp) return;
-            
             const { data: isValid } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
             if(!isValid) return alert('كود خاطئ!');
 
             await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
-            if (watchId) navigator.geolocation.clearWatch(watchId); // إيقاف التتبع
+            if (watchId) navigator.geolocation.clearWatch(watchId);
             alert('تم التسليم بنجاح!');
             
             let newBalance = Number(currentProfile.wallet_balance) + 450;
@@ -370,7 +360,7 @@
             renderDriverOrders();
         }
 
-        // --- الأدمن ---
+        // --- لوحة الأدمن (مع التتبع) ---
         async function loadAdminData() {
             let { data: users } = await supabaseClient.from('profiles').select('*');
             document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
@@ -379,6 +369,61 @@
                     ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 text-white py-1 rounded">✅ موافقة</button>` : ''}
                 </div>
             `).join('');
+
+            let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
+            
+            // 1. رسم الطلبات النشطة
+            let activeOrders = (orders || []).filter(o => o.status === 'accepted' || o.status === 'picked_up');
+            let liveHtml = activeOrders.map(o => `
+                <div class="bg-white p-3 rounded-lg shadow-sm mb-3 border-r-4 border-blue-500">
+                    <p class="font-bold text-sm">شحنة #${o.id.slice(0,4)} - من ${o.pickup_address}</p>
+                    <div id="adminLiveMap_${o.id}" style="height: 200px; border-radius: 8px; margin-top: 8px;"></div>
+                </div>
+            `).join('');
+            document.getElementById('adminLiveTracking').innerHTML = liveHtml || '<p class="text-gray-500 text-sm mb-4">لا يوجد شحنات نشطة حالياً</p>';
+
+            // 2. سجل الطلبات العادي
+            document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => `
+                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
+                    <div class="flex justify-between font-bold"><span>${o.cargo_type}</span><span class="text-yellow-600">${formatMoney(o.price)}</span></div>
+                    <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
+                    <p class="text-xs mt-1 font-bold text-blue-600">الدفع: ${o.payment_method}</p>
+                    <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
+                </div>
+            `).join('');
+
+            // 3. تشغيل الخرائط الحية للأدمن
+            activeOrders.forEach(o => initAdminLiveTracking(o));
+        }
+
+        function initAdminLiveTracking(order) {
+            setTimeout(() => {
+                let el = document.getElementById(`adminLiveMap_${order.id}`);
+                if (!el) return;
+
+                let aMap = L.map(el).setView([order.pickup_lat, order.pickup_lng], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(aMap);
+                L.marker([order.pickup_lat, order.pickup_lng]).addTo(aMap).bindPopup('التحميل');
+                
+                let dMarker = null;
+                if (order.driver_lat && order.driver_lng) {
+                    dMarker = L.marker([order.driver_lat, order.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(aMap).bindPopup('السائق');
+                }
+
+                // استماع لحظي للأدمن
+                supabaseClient.channel('admin_track_' + order.id)
+                  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${order.id}` }, payload => {
+                      let newOrder = payload.new;
+                      if (newOrder.driver_lat && newOrder.driver_lng) {
+                          if (dMarker) {
+                              dMarker.setLatLng([newOrder.driver_lat, newOrder.driver_lng]);
+                              aMap.panTo([newOrder.driver_lat, newOrder.driver_lng]);
+                          } else {
+                              dMarker = L.marker([newOrder.driver_lat, newOrder.driver_lng], { icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] }) }).addTo(aMap);
+                          }
+                      }
+                  }).subscribe();
+            }, 500);
         }
 
         async function approveDriver(userId) {
@@ -386,7 +431,6 @@
             alert('تم الاعتماد!'); loadAdminData();
         }
 
-        // --- مساعدات ---
         function showScreen(id) {
             ['authScreen', 'clientScreen', 'driverScreen', 'adminScreen', 'approvalScreen'].forEach(s => {
                 let el = document.getElementById(s); if(el) el.classList.add('hide');
@@ -396,7 +440,6 @@
 
         async function logout() {
             if (watchId) navigator.geolocation.clearWatch(watchId);
-            if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
             await supabaseClient.auth.signOut();
             location.reload();
         }
