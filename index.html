@@ -98,10 +98,32 @@
                 </div>
             </div>
 
+            <!-- قسم أقرب الشحنات ورحلة العودة -->
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-blue-500">
+                <h3 class="font-bold text-blue-800 mb-2">🔍 ابحث عن شحنة (رحلة العودة)</h3>
+                <p class="text-xs text-gray-500 mb-2">اختار محافظة الوصول عشان التطبيق يجيبلك شحنات رايحة هناك بدل ما ترجع فاضي.</p>
+                <select id="return_gov" class="w-full p-2 border rounded-lg mb-2 text-sm bg-blue-50">
+                    <option value="">كل المحافظات (بدون فلتر)</option>
+                    <option value="القاهرة">القاهرة</option>
+                    <option value="الجيزة">الجيزة</option>
+                    <option value="الإسكندرية">الإسكندرية</option>
+                    <option value="الدقهلية">الدقهلية</option>
+                    <option value="الشرقية">الشرقية</option>
+                    <option value="الغربية">الغربية</option>
+                    <option value="المنوفية">المنوفية</option>
+                    <option value="البحيرة">البحيرة</option>
+                    <option value="أسيوط">أسيوط</option>
+                    <option value="سوهاج">سوهاج</option>
+                    <option value="قنا">قنا</option>
+                    <option value="أسوان">أسوان</option>
+                </select>
+                <button onclick="updateDriverLocation()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold p-2 rounded-lg text-sm">📍 تحديث موقعي وعرض الأقرب</button>
+            </div>
+
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">رحلاتي الحالية</h3>
             <div id="driverMyOrders"></div>
 
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">طلبات متاحة للنقل</h3>
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">طلبات متاحة (مرتبة بالأقرب ليك)</h3>
             <div id="driverPendingOrders"></div>
         </div>
 
@@ -120,7 +142,7 @@
 
     </main>
 
-    <!-- زرار واتساب خدمة العملاء (ثابت في كل الشاشات) -->
+    <!-- زرار واتساب خدمة العملاء -->
     <a href="https://wa.me/201008781263?text=مرحباً%20أحتاج%20مساعدة%20في%20تطبيق%20نقلة" target="_blank" class="fixed bottom-4 left-4 bg-green-500 text-white p-4 rounded-full shadow-lg z-50 flex items-center justify-center hover:bg-green-600 transition">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
     </a>
@@ -136,6 +158,10 @@
         let marker = null;
         let selectedLat = 30.0444; 
         let selectedLng = 31.2357;
+
+        // متغيرات تتبع السائق
+        let driverLat = null;
+        let driverLng = null;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
@@ -198,7 +224,7 @@
                     } else {
                         document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
                         showScreen('driverScreen');
-                        renderDriverOrders();
+                        renderDriverOrders(); // بترندر الطلبات عادي
                     }
                 } else if(data.role === 'admin') {
                     showScreen('adminScreen');
@@ -208,6 +234,30 @@
                 alert('خطأ في تحميل البيانات: ' + err.message);
                 logout();
             }
+        }
+
+        // --- حساب المسافات (قانون هافرساين) ---
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return 999999; // مسافة كبيرة جداً لو الإحداثيات مش موجودة
+            const R = 6371; // نصف قطر الأرض بالكيلومتر
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // المسافة بالكيلومتر
+        }
+
+        // --- تحديث موقع السائق ---
+        function updateDriverLocation() {
+            if (!navigator.geolocation) return alert('المتصفح لا يدعم تحديد الموقع');
+            navigator.geolocation.getCurrentPosition(pos => {
+                driverLat = pos.coords.latitude;
+                driverLng = pos.coords.longitude;
+                alert('تم تحديد موقعك، جاري ترتيب الشحنات بالأقرب ليك ✅');
+                renderDriverOrders(); // نعيد ترتيب الطلبات
+            }, () => alert('تعذر تحديد الموقع، تأكد من إعطاء صلاحية الموقع.'));
         }
 
         // --- الإدارة ---
@@ -319,7 +369,6 @@
             let ordersHtml = '';
             for (let o of (orders || [])) {
                 let contactBtn = '';
-                // لو السائق قبل الطلب، هات رقمه واعمل زرار واتساب
                 if (o.status === 'accepted' || o.status === 'picked_up') {
                     let { data: driver } = await supabaseClient.from('profiles').select('phone, full_name').eq('id', o.driver_id).single();
                     if (driver && driver.phone && driver.phone !== 'غير مسجل') {
@@ -346,6 +395,7 @@
 
         // --- السائق ---
         async function renderDriverOrders() {
+            // رحلاتي
             let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
             document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => {
                 const netEarnings = (o.price * 0.98).toFixed(2);
@@ -360,12 +410,32 @@
                 </div>
             `}).join('') || '<p class="text-gray-500 text-center text-sm mb-4">لا يوجد رحلات جارية</p>';
 
+            // الطلبات المتاحة (مع الترتيب والفلترة)
             let { data: pendingOrders } = await supabaseClient.from('orders').select('*').eq('status', 'pending');
-            document.getElementById('driverPendingOrders').innerHTML = (pendingOrders || []).map(o => {
+            
+            let filteredOrders = pendingOrders || [];
+            const returnGov = document.getElementById('return_gov') ? document.getElementById('return_gov').value : '';
+
+            // فلترة حسب محافظة العودة (لو اختارها)
+            if (returnGov) {
+                filteredOrders = filteredOrders.filter(o => o.dropoff_address.includes(returnGov) || o.dropoff_address.includes(returnGov.replace('ال', '')));
+            }
+
+            // ترتيب حسب المسافة (لو السائق حدد موقعه)
+            if (driverLat && driverLng) {
+                filteredOrders.forEach(o => {
+                    o.distance = calculateDistance(driverLat, driverLng, o.pickup_lat, o.pickup_lng);
+                });
+                filteredOrders.sort((a, b) => a.distance - b.distance); // الأقرب أولاً
+            }
+
+            document.getElementById('driverPendingOrders').innerHTML = filteredOrders.map(o => {
                 const netEarnings = (o.price * 0.98).toFixed(2);
+                const distanceText = o.distance ? `<p class="text-xs text-blue-500 font-bold">🚗 يبعد عنك: ${o.distance.toFixed(1)} كم</p>` : '';
                 return `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3">
                     <p class="font-bold text-gray-800 text-sm">📍 ${o.pickup_address} <br> 🏁 ${o.dropoff_address}</p>
+                    ${distanceText}
                     <p class="text-yellow-600 font-bold my-2">السعر: ${formatMoney(o.price)}</p>
                     <p class="text-green-600 font-bold text-sm mb-2">صافي أرباحك: ${formatMoney(netEarnings)}</p>
                     <button onclick="acceptOrder('${o.id}')" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-bold">قبول الطلب</button>
