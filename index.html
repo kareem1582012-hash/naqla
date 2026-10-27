@@ -132,7 +132,7 @@
         let driverMap = null, driverRouting = null;
         let selectedLat = 30.0444, selectedLng = 31.2357;
         let watchId = null;
-        let driverPollingInterval = null; // متغير للتحديث التلقائي
+        let driverPollingInterval = null;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
@@ -204,7 +204,6 @@
                         showScreen('driverScreen');
                         renderDriverOrders();
                         
-                        // تشغيل التحديث التلقائي كل 10 ثواني عشان يشوف الطلبات الجديدة
                         if (driverPollingInterval) clearInterval(driverPollingInterval);
                         driverPollingInterval = setInterval(renderDriverOrders, 10000);
                     }
@@ -272,7 +271,7 @@
                 payment_method: payMethod
             });
 
-            alert('تم إرسال الطلب! كود التسليم: ' + otp);
+            alert('تم إرسال الطلب! كود التسليم الخاص بك: ' + otp + '\n(برجاء إعطاء هذا الكود للسائق عند التسليم)');
             renderClientOrders();
         }
 
@@ -296,6 +295,15 @@
                     ratingHtml = `<p class="text-sm text-yellow-600 font-bold mt-2">تقييمك: ${'★'.repeat(o.rating)}</p>`;
                 }
 
+                // هنا بقى بنعرض كود التسليم للعميل عشان مينساهوش
+                let otpDisplay = '';
+                if (o.status !== 'delivered' && o.status !== 'cancelled') {
+                    otpDisplay = `<div class="mt-2 bg-red-50 border border-red-200 p-2 rounded-lg text-center">
+                        <p class="text-sm text-gray-600">كود التسليم للسائق:</p>
+                        <p class="text-xl font-black text-red-600 tracking-widest">${o.otp_code}</p>
+                    </div>`;
+                }
+
                 html += `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 ${o.status === 'pending' ? 'border-yellow-500' : o.status === 'delivered' ? 'border-green-500' : 'border-blue-500'}">
                     <div class="flex justify-between">
@@ -305,6 +313,7 @@
                     <p class="text-sm mt-2 text-gray-600">📍 من: ${o.pickup_address} <br> 🏁 إلى: ${o.dropoff_address}</p>
                     <p class="font-bold mt-2 text-yellow-600">${formatMoney(o.price)}</p>
                     <p class="text-xs text-blue-600 font-bold">الدفع: ${getPaymentText(o.payment_method)}</p>
+                    ${otpDisplay}
                     ${mapDiv}
                     ${ratingHtml}
                 </div>`;
@@ -411,7 +420,7 @@
         async function acceptOrder(id) {
             if(!confirm('قبول الرحلة؟')) return;
             await supabaseClient.from('orders').update({ status: 'accepted', driver_id: currentUser.id }).eq('id', id);
-            if (driverPollingInterval) clearInterval(driverPollingInterval); // وقف التحديث التلقائي عشان الخريطة متتلخبطش
+            if (driverPollingInterval) clearInterval(driverPollingInterval); 
             renderDriverOrders();
         }
 
@@ -423,8 +432,12 @@
         async function deliverOrder(id) {
             const otp = prompt('أدخل كود التسليم:');
             if(!otp) return;
-            const { data: isValid } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
-            if(!isValid) return alert('كود خاطئ!');
+            
+            // التعديل هنا: نتأكد إن الدالة بترجع true فعلاً
+            const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
+            
+            if(error) return alert('حدث خطأ: ' + error.message);
+            if(isValid !== true) return alert('كود خاطئ! تأكد من الكود اللي في شاشة العميل.');
 
             await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
             if (watchId) navigator.geolocation.clearWatch(watchId);
@@ -435,7 +448,6 @@
             currentProfile.wallet_balance = newBalance;
             document.getElementById('driverWallet').innerText = formatMoney(newBalance);
             
-            // رجع التحديث التلقائي بعد التسليم
             if (driverPollingInterval) clearInterval(driverPollingInterval);
             driverPollingInterval = setInterval(renderDriverOrders, 10000);
             
