@@ -8,20 +8,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- مكتبات الخريطة والمسارات -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
     
     <style>
         body { font-family: 'Cairo', sans-serif; background-color: #f3f4f6; padding-bottom: 80px; }
         .hide { display: none !important; }
-        #map { height: 200px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
+        #map, #driverMap, #clientOrderMap { height: 250px; width: 100%; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; z-index: 0; }
     </style>
 </head>
 <body>
 
     <header class="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-md">
         <div class="flex items-center gap-3">
-            <!-- لوجو بسيط وشيك -->
             <div class="bg-yellow-500 text-black font-black text-xl rounded-lg w-10 h-10 flex items-center justify-center">M</div>
             <h1 class="text-xl font-bold">مسار <span class="text-yellow-500 text-sm">MASAR</span></h1>
         </div>
@@ -40,7 +43,7 @@
                 <option value="driver">سائق (أستلم شحنات)</option>
             </select>
             <input type="text" id="name" placeholder="الاسم بالكامل" class="w-full p-3 border rounded-lg mb-3">
-            <input type="text" id="phone" placeholder="رقم الهاتف (مثال: 010xxxxxxxx)" class="w-full p-3 border rounded-lg mb-3" dir="ltr">
+            <input type="text" id="phone" placeholder="رقم الهاتف" class="w-full p-3 border rounded-lg mb-3" dir="ltr">
             <button onclick="handleAuth()" id="authBtn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg transition">دخول</button>
         </div>
 
@@ -48,7 +51,6 @@
         <div id="approvalScreen" class="hide text-center bg-white p-6 rounded-2xl shadow-lg mt-10">
             <div class="text-5xl mb-4">⏳</div>
             <h2 class="text-xl font-bold text-red-600 mb-4">حسابك قيد المراجعة</h2>
-            <p class="text-gray-600 mb-4">أهلاً بك يا كابتن. حسابك قيد المراجعة من الإدارة.</p>
         </div>
 
         <!-- واجهة العميل -->
@@ -58,32 +60,22 @@
                     <p class="text-gray-500 text-sm">رصيد المحفظة</p>
                     <p class="text-2xl font-bold text-green-600" id="clientWallet">0 ج.م</p>
                 </div>
-                <button class="bg-black text-white px-4 py-2 rounded-lg text-sm">+ شحن</button>
             </div>
 
             <div class="bg-white p-5 rounded-2xl shadow-sm mb-4">
                 <h3 class="font-bold text-lg mb-4 text-gray-800">طلب شحنة جديدة</h3>
                 <input type="text" id="pickup" placeholder="عنوان التحميل (مثال: مدينة نصر)" class="w-full p-2 border rounded-lg mb-2">
                 <input type="text" id="dropoff" placeholder="عنوان التسليم (مثال: التجمع الخامس)" class="w-full p-2 border rounded-lg mb-2">
-                <select id="vehicle" class="w-full p-2 border rounded-lg mb-2 bg-gray-50">
-                    <option value="نقل خفيف">نقل خفيف (ربع نقل)</option>
-                    <option value="جامبو">جامبو</option>
-                    <option value="تريلا">تريلا</option>
-                </select>
                 <select id="payment_method" class="w-full p-2 border rounded-lg mb-2 bg-gray-50 font-bold text-blue-700">
                     <option value="cash">💵 الدفع نقداً (كاش)</option>
                     <option value="instapay">📱 إنستا باي (InstaPay)</option>
                     <option value="visa">💳 فيزا / ماستركارد</option>
                 </select>
-                <div class="flex items-center gap-2 mb-2 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                    <input type="checkbox" id="labor" class="w-4 h-4">
-                    <label for="labor" class="text-sm font-bold text-gray-700">أحتاج عمال تحميل (+240 ج.م)</label>
-                </div>
                 
                 <div id="map"></div>
-                <button onclick="getLocation()" class="w-full bg-blue-500 hover:bg-blue-400 text-white font-bold p-2 rounded-lg mb-3 text-sm">📍 استخدام موقعي الحالي (GPS)</button>
+                <p class="text-xs text-gray-500 mb-2">📍 دوس على الخريطة لتحديد مكان التحميل بدقة</p>
 
-                <button onclick="createOrder()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg mt-2">تأكيد الطلب وتوليد كود التسليم</button>
+                <button onclick="createOrder()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold p-3 rounded-lg mt-2">تأكيد الطلب</button>
             </div>
 
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">شحناتي</h3>
@@ -99,31 +91,10 @@
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-blue-500">
-                <h3 class="font-bold text-blue-800 mb-2">🔍 ابحث عن شحنة (رحلة العودة)</h3>
-                <p class="text-xs text-gray-500 mb-2">اختار محافظة الوصول عشان التطبيق يجيبلك شحنات رايحة هناك بدل ما ترجع فاضي.</p>
-                <select id="return_gov" class="w-full p-2 border rounded-lg mb-2 text-sm bg-blue-50">
-                    <option value="">كل المحافظات (بدون فلتر)</option>
-                    <option value="القاهرة">القاهرة</option>
-                    <option value="الجيزة">الجيزة</option>
-                    <option value="الإسكندرية">الإسكندرية</option>
-                    <option value="الدقهلية">الدقهلية</option>
-                    <option value="الشرقية">الشرقية</option>
-                    <option value="الغربية">الغربية</option>
-                    <option value="المنوفية">المنوفية</option>
-                    <option value="البحيرة">البحيرة</option>
-                    <option value="أسيوط">أسيوط</option>
-                    <option value="سوهاج">سوهاج</option>
-                    <option value="قنا">قنا</option>
-                    <option value="أسوان">أسوان</option>
-                </select>
-                <button onclick="updateDriverLocation()" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold p-2 rounded-lg text-sm">📍 تحديث موقعي وعرض الأقرب</button>
-            </div>
-
             <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">رحلاتي الحالية</h3>
             <div id="driverMyOrders"></div>
 
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">طلبات متاحة (مرتبة بالأقرب ليك)</h3>
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">طلبات متاحة</h3>
             <div id="driverPendingOrders"></div>
         </div>
 
@@ -132,18 +103,16 @@
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
             </div>
-
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين (بيانات كاملة)</h3>
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين</h3>
             <div id="adminUsersList" class="mb-6"></div>
-
-            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">سجل الطلبات (مراجعة يومية)</h3>
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">سجل الطلبات</h3>
             <div id="adminOrdersList"></div>
         </div>
 
     </main>
 
-    <a href="https://wa.me/201008781263?text=مرحباً%20أحتاج%20مساعدة%20في%20تطبيق%20مسار" target="_blank" class="fixed bottom-4 left-4 bg-green-500 text-white p-4 rounded-full shadow-lg z-50 flex items-center justify-center hover:bg-green-600 transition">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+    <a href="https://wa.me/201008781263" target="_blank" class="fixed bottom-4 left-4 bg-green-500 text-white p-4 rounded-full shadow-lg z-50 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
     </a>
 
     <script>
@@ -153,20 +122,23 @@
         
         let currentUser = null;
         let currentProfile = null;
-        let map = null;
-        let marker = null;
-        let selectedLat = 30.0444; 
-        let selectedLng = 31.2357;
-
-        let driverLat = null;
-        let driverLng = null;
+        
+        // متغيرات الخرائط
+        let map = null, marker = null;
+        let driverMap = null, driverRouting = null;
+        let clientOrderMap = null, clientRouting = null, liveDriverMarker = null;
+        let realtimeChannel = null;
+        
+        let selectedLat = 30.0444, selectedLng = 31.2357;
+        let watchId = null;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
 
+        // دالة الدخول
         async function handleAuth() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const name = document.getElementById('name').value || 'مستخدم جديد';
+            const name = document.getElementById('name').value || 'مستخدم';
             const phone = document.getElementById('phone').value || 'غير مسجل';
             const role = document.getElementById('role').value;
 
@@ -180,12 +152,8 @@
                     if (signUpError) throw signUpError;
                     
                     await supabaseClient.from('profiles').insert({
-                        id: signUpData.user.id,
-                        full_name: name,
-                        phone: phone,
-                        role: role,
-                        wallet_balance: role === 'driver' ? 0 : 2500,
-                        approved: role === 'client' ? true : false
+                        id: signUpData.user.id, full_name: name, phone: phone, role: role,
+                        wallet_balance: role === 'driver' ? 0 : 2500, approved: role === 'client'
                     });
                     
                     alert('تم إنشاء الحساب بنجاح!');
@@ -195,31 +163,19 @@
                 } else {
                     loadApp(data.user);
                 }
-            } catch (err) {
-                alert('خطأ: ' + err.message);
-            }
+            } catch (err) { alert('خطأ: ' + err.message); }
         }
 
+        // تحميل التطبيق
         async function loadApp(user) {
             if(!user) return showScreen('authScreen');
             currentUser = user;
-            
             try {
-                // استخدمنا maybeSingle عشان ميعملش كراش لو الحساب مش موجود
-                let { data, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).maybeSingle();
-                if (error) throw error;
-                
-                // لو الحساب مش موجود، نعمله أوتوماتيك
+                let { data } = await supabaseClient.from('profiles').select('*').eq('id', user.id).maybeSingle();
                 if (!data) {
-                    const { data: newProfile, error: insertError } = await supabaseClient.from('profiles').insert({
-                        id: user.id,
-                        full_name: user.email.split('@')[0],
-                        role: 'client',
-                        wallet_balance: 2500,
-                        approved: true
+                    const { data: newProfile } = await supabaseClient.from('profiles').insert({
+                        id: user.id, full_name: user.email.split('@')[0], role: 'client', wallet_balance: 2500, approved: true
                     }).select().single();
-                    
-                    if (insertError) throw insertError;
                     data = newProfile;
                 }
 
@@ -230,169 +186,62 @@
                     document.getElementById('clientWallet').innerText = formatMoney(data.wallet_balance);
                     showScreen('clientScreen');
                     renderClientOrders();
-                    setTimeout(initMap, 200);
+                    setTimeout(initClientMap, 200);
                 } else if(data.role === 'driver') {
-                    if(!data.approved) {
-                        showScreen('approvalScreen');
-                    } else {
+                    if(!data.approved) showScreen('approvalScreen');
+                    else {
                         document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
                         showScreen('driverScreen');
-                        renderDriverOrders(); 
+                        renderDriverOrders();
                     }
                 } else if(data.role === 'admin') {
                     showScreen('adminScreen');
                     loadAdminData();
                 }
-            } catch (err) {
-                console.error(err);
-                // في حالة حدوث أي خطأ، نظهر شاشة الدخول عشان ميتعلقش
-                showScreen('authScreen');
-            }
+            } catch (err) { showScreen('authScreen'); }
         }
 
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            if (!lat1 || !lon1 || !lat2 || !lon2) return 999999;
-            const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                      Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
-        }
-
-        function updateDriverLocation() {
-            if (!navigator.geolocation) return alert('المتصفح لا يدعم تحديد الموقع');
-            navigator.geolocation.getCurrentPosition(pos => {
-                driverLat = pos.coords.latitude;
-                driverLng = pos.coords.longitude;
-                alert('تم تحديد موقعك، جاري ترتيب الشحنات بالأقرب ليك ✅');
-                renderDriverOrders();
-            }, () => alert('تعذر تحديد الموقع، تأكد من إعطاء صلاحية الموقع.'));
-        }
-
-        async function loadAdminData() {
-            try {
-                let { data: users } = await supabaseClient.from('profiles').select('*');
-                document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
-                    <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
-                        <b>${u.full_name}</b> (${u.role})<br>
-                        📞 <a href="tel:${u.phone}" class="text-blue-600 font-bold">${u.phone}</a><br>
-                        المحفظة: ${formatMoney(u.wallet_balance)}
-                        ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 hover:bg-green-600 text-white py-1 rounded text-xs font-bold">✅ موافقة السائق</button>` : ''}
-                    </div>
-                `).join('');
-
-                let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
-                document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => {
-                    const commission = (o.price * 0.02).toFixed(2);
-                    return `
-                    <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 border-yellow-500">
-                        <div class="flex justify-between font-bold">
-                            <span>${o.cargo_type}</span>
-                            <span class="text-yellow-600">${formatMoney(o.price)}</span>
-                        </div>
-                        <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
-                        <p class="text-xs mt-1 font-bold text-blue-600">طريقة الدفع: ${getPaymentText(o.payment_method)}</p>
-                        <p class="text-xs mt-1 font-bold text-red-500">عمولة المنصة (2%): ${formatMoney(commission)}</p>
-                        <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
-                    </div>
-                `}).join('');
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        async function approveDriver(userId) {
-            if(!confirm('هل أنت متأكد من اعتماد هذا السائق؟')) return;
-            await supabaseClient.from('profiles').update({ approved: true }).eq('id', userId);
-            alert('تم اعتماد السائق بنجاح!');
-            loadAdminData();
-        }
-
-        function initMap() {
+        // --- خريطة العميل (لتحديد مكان التحميل) ---
+        function initClientMap() {
             if (!document.getElementById('map')) return;
             if (map) { map.remove(); map = null; }
-            map = L.map('map').setView([selectedLat, selectedLng], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
+            map = L.map('map').setView([selectedLat, selectedLng], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             marker = L.marker([selectedLat, selectedLng], {draggable: true}).addTo(map);
             marker.on('dragend', e => { selectedLat = e.target.getLatLng().lat; selectedLng = e.target.getLatLng().lng; });
             map.on('click', e => { marker.setLatLng(e.latlng); selectedLat = e.latlng.lat; selectedLng = e.latlng.lng; });
         }
 
-        function getLocation() {
-            if (!navigator.geolocation) return alert('المتصفح لا يدعم تحديد الموقع');
-            navigator.geolocation.getCurrentPosition(pos => {
-                selectedLat = pos.coords.latitude;
-                selectedLng = pos.coords.longitude;
-                if (map && marker) { map.setView([selectedLat, selectedLng], 15); marker.setLatLng([selectedLat, selectedLng]); }
-            }, () => alert('تعذر تحديد الموقع.'));
-        }
-
-        function showScreen(id) {
-            ['authScreen', 'clientScreen', 'driverScreen', 'adminScreen', 'approvalScreen'].forEach(s => {
-                let el = document.getElementById(s);
-                if(el) el.classList.add('hide');
-            });
-            let target = document.getElementById(id);
-            if(target) target.classList.remove('hide');
-        }
-
-        async function logout() {
-            await supabaseClient.auth.signOut();
-            currentUser = null;
-            document.getElementById('logoutBtn').classList.add('hide');
-            showScreen('authScreen');
-        }
-
+        // إنشاء طلب
         async function createOrder() {
             const pickup = document.getElementById('pickup').value;
             const dropoff = document.getElementById('dropoff').value;
-            const vehicle = document.getElementById('vehicle').value;
-            const needsLabor = document.getElementById('labor').checked;
-            const paymentMethod = document.getElementById('payment_method').value;
-
             if(!pickup || !dropoff) return alert('ادخل العناوين');
 
-            const price = 450 + (needsLabor ? 240 : 0);
+            // السعر الافتراضي (ممكن نطوره بعدين يتحسب بالمسافة)
+            const price = 450; 
             const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
             await supabaseClient.from('orders').insert({
                 client_id: currentUser.id,
-                pickup_address: pickup,
-                dropoff_address: dropoff,
-                cargo_type: vehicle,
-                price: price,
-                needs_labor: needsLabor,
-                otp_code: otp,
-                pickup_lat: selectedLat,
-                pickup_lng: selectedLng,
-                payment_method: paymentMethod
+                pickup_address: pickup, dropoff_address: dropoff, cargo_type: 'نقل خفيف',
+                price: price, otp_code: otp, pickup_lat: selectedLat, pickup_lng: selectedLng,
+                payment_method: document.getElementById('payment_method').value
             });
 
-            alert('تم إرسال الطلب بنجاح!\nكود التسليم الخاص بك: ' + otp);
-            document.getElementById('pickup').value = '';
-            document.getElementById('dropoff').value = '';
+            alert('تم إرسال الطلب! كود التسليم: ' + otp);
             renderClientOrders();
         }
 
+        // عرض طلبات العميل + التتبع المباشر
         async function renderClientOrders() {
             let { data: orders } = await supabaseClient.from('orders').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
             
-            let ordersHtml = '';
+            let html = '';
             for (let o of (orders || [])) {
-                let contactBtn = '';
-                if (o.status === 'accepted' || o.status === 'picked_up') {
-                    let { data: driver } = await supabaseClient.from('profiles').select('phone, full_name').eq('id', o.driver_id).single();
-                    if (driver && driver.phone && driver.phone !== 'غير مسجل') {
-                        let cleanPhone = driver.phone.replace(/\s+/g, '');
-                        let waLink = `https://wa.me/2${cleanPhone}?text=مرحباً%20كابتن%20${driver.full_name}،%20أنا%20صاحب%20الشحنة%20رقم%20${o.id.slice(0,4)}%20من%20${o.pickup_address}`;
-                        contactBtn = `<a href="${waLink}" target="_blank" class="block w-full bg-green-500 hover:bg-green-600 text-white text-center mt-2 py-2 rounded-lg text-sm font-bold">💬 تواصل مع السائق (واتساب)</a>`;
-                    }
-                }
-
-                ordersHtml += `
+                let mapDiv = o.status === 'accepted' || o.status === 'picked_up' ? `<div id="clientOrderMap_${o.id}" class="mt-2" style="height:200px;"></div>` : '';
+                
+                html += `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 ${o.status === 'pending' ? 'border-yellow-500' : o.status === 'delivered' ? 'border-green-500' : 'border-blue-500'}">
                     <div class="flex justify-between">
                         <span class="font-bold text-gray-800">${o.cargo_type}</span>
@@ -400,60 +249,100 @@
                     </div>
                     <p class="text-sm mt-2 text-gray-600">📍 من: ${o.pickup_address} <br> 🏁 إلى: ${o.dropoff_address}</p>
                     <p class="font-bold mt-2 text-yellow-600">${formatMoney(o.price)}</p>
-                    <p class="text-xs text-blue-600 font-bold">الدفع: ${getPaymentText(o.payment_method)}</p>
-                    ${contactBtn}
+                    ${mapDiv}
                 </div>`;
             }
-            document.getElementById('clientOrders').innerHTML = ordersHtml || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات</p>';
+            document.getElementById('clientOrders').innerHTML = html || '<p class="text-gray-500 text-center">لا يوجد طلبات</p>';
+
+            // تهيئة خرائط التتبع للطلبات النشطة
+            (orders || []).forEach(o => {
+                if (o.status === 'accepted' || o.status === 'picked_up') {
+                    initClientLiveTracking(o);
+                }
+            });
         }
 
+        // التتبع المباشر للعميل
+        async function initClientLiveTracking(order) {
+            setTimeout(() => {
+                let el = document.getElementById(`clientOrderMap_${order.id}`);
+                if (!el || !el.offsetParent) return;
+
+                let cMap = L.map(el).setView([order.pickup_lat, order.pickup_lng], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(cMap);
+                
+                L.marker([order.pickup_lat, order.pickup_lng]).addTo(cMap).bindPopup('التحميل');
+                
+                let dMarker = null;
+                if (order.driver_lat && order.driver_lng) {
+                    dMarker = L.marker([order.driver_lat, order.driver_lng], {
+                        icon: L.divIcon({ html: '🚚', className: 'text-2xl', iconSize: [30,30] })
+                    }).addTo(cMap).bindPopup('السائق');
+                }
+
+                // الاستماع لتحديثات موقع السائق لحظياً
+                if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+                realtimeChannel = supabaseClient.channel('custom-all-channel')
+                  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${order.id}` }, payload => {
+                      let newOrder = payload.new;
+                      if (newOrder.driver_lat && newOrder.driver_lng && dMarker) {
+                          dMarker.setLatLng([newOrder.driver_lat, newOrder.driver_lng]);
+                          cMap.panTo([newOrder.driver_lat, newOrder.driver_lng]);
+                      }
+                  }).subscribe();
+            }, 500);
+        }
+
+        // --- واجهة السائق والمسارات ---
         async function renderDriverOrders() {
             let { data: myOrders } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
-            document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => {
-                const netEarnings = (o.price * 0.98).toFixed(2);
-                return `
+            
+            document.getElementById('driverMyOrders').innerHTML = (myOrders || []).map(o => `
                 <div class="bg-white p-4 rounded-xl shadow-sm mb-3 border-r-4 border-blue-500">
                     <p class="font-bold text-gray-800">${o.pickup_address} ➡️ ${o.dropoff_address}</p>
                     <p class="text-sm text-gray-500 mt-1">الحالة: ${getStatusText(o.status)}</p>
-                    <p class="font-bold text-yellow-600 mt-2">السعر: ${formatMoney(o.price)}</p>
-                    <p class="font-bold text-green-600 text-sm">صافي أرباحك: ${formatMoney(netEarnings)}</p>
-                    ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تأكيد استلام الشحنة</button>` : ''}
-                    ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}', '${netEarnings}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg text-sm font-bold">تسليم وإنهاء الرحلة</button>` : ''}
+                    <div id="driverMap_${o.id}" class="mt-2" style="height: 200px;"></div>
+                    ${o.status === 'accepted' ? `<button onclick="updateOrder('${o.id}', 'picked_up')" class="w-full bg-blue-500 text-white mt-3 py-2 rounded-lg font-bold">تأكيد الاستلام</button>` : ''}
+                    ${o.status === 'picked_up' ? `<button onclick="deliverOrder('${o.id}')" class="w-full bg-green-500 text-white mt-3 py-2 rounded-lg font-bold">تسليم</button>` : ''}
                 </div>
-            `}).join('') || '<p class="text-gray-500 text-center text-sm mb-4">لا يوجد رحلات جارية</p>';
+            `).join('') || '<p class="text-gray-500 text-center">لا يوجد رحلات</p>';
 
-            let { data: pendingOrders } = await supabaseClient.from('orders').select('*').eq('status', 'pending');
-            
-            let filteredOrders = pendingOrders || [];
-            const returnGov = document.getElementById('return_gov') ? document.getElementById('return_gov').value : '';
+            (myOrders || []).forEach(o => drawDriverRoute(o));
+        }
 
-            if (returnGov) {
-                filteredOrders = filteredOrders.filter(o => o.dropoff_address.includes(returnGov) || o.dropoff_address.includes(returnGov.replace('ال', '')));
-            }
+        async function drawDriverRoute(order) {
+            setTimeout(() => {
+                let el = document.getElementById(`driverMap_${order.id}`);
+                if (!el || !el.offsetParent) return;
 
-            if (driverLat && driverLng) {
-                filteredOrders.forEach(o => {
-                    o.distance = calculateDistance(driverLat, driverLng, o.pickup_lat, o.pickup_lng);
+                if (driverMap) driverMap.remove();
+                driverMap = L.map(el).setView([order.pickup_lat, order.pickup_lng], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(driverMap);
+
+                let start, end;
+                navigator.geolocation.getCurrentPosition(pos => {
+                    start = [pos.coords.latitude, pos.coords.longitude];
+                    end = [order.pickup_lat, order.pickup_lng];
+                    
+                    if (driverRouting) driverMap.removeControl(driverRouting);
+                    driverRouting = L.Routing.control({
+                        waypoints: [L.latLng(start), L.latLng(end)],
+                        routeWhileDragging: false, show: false, addWaypoints: false, fitSelectedRoutes: true, lineOptions: { styles: [{color: '#f59e0b', weight: 5}] }
+                    }).addTo(driverMap);
                 });
-                filteredOrders.sort((a, b) => a.distance - b.distance);
-            }
 
-            document.getElementById('driverPendingOrders').innerHTML = filteredOrders.map(o => {
-                const netEarnings = (o.price * 0.98).toFixed(2);
-                const distanceText = o.distance ? `<p class="text-xs text-blue-500 font-bold">🚗 يبعد عنك: ${o.distance.toFixed(1)} كم</p>` : '';
-                return `
-                <div class="bg-white p-4 rounded-xl shadow-sm mb-3">
-                    <p class="font-bold text-gray-800 text-sm">📍 ${o.pickup_address} <br> 🏁 ${o.dropoff_address}</p>
-                    ${distanceText}
-                    <p class="text-yellow-600 font-bold my-2">السعر: ${formatMoney(o.price)}</p>
-                    <p class="text-green-600 font-bold text-sm mb-2">صافي أرباحك: ${formatMoney(netEarnings)}</p>
-                    <button onclick="acceptOrder('${o.id}')" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-bold">قبول الطلب</button>
-                </div>
-            `}).join('') || '<p class="text-gray-500 text-center text-sm">لا يوجد طلبات متاحة حالياً</p>';
+                // بدء إرسال الموقع للسيرفر كل 10 ثواني
+                if (watchId) navigator.geolocation.clearWatch(watchId);
+                watchId = navigator.geolocation.watchPosition(pos => {
+                    supabaseClient.from('orders').update({
+                        driver_lat: pos.coords.latitude, driver_lng: pos.coords.longitude
+                    }).eq('id', order.id).then();
+                }, null, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+            }, 500);
         }
 
         async function acceptOrder(id) {
-            if(!confirm('هل أنت متأكد من قبول الرحلة؟')) return;
+            if(!confirm('قبول الرحلة؟')) return;
             await supabaseClient.from('orders').update({ status: 'accepted', driver_id: currentUser.id }).eq('id', id);
             renderDriverOrders();
         }
@@ -463,36 +352,61 @@
             renderDriverOrders();
         }
 
-        async function deliverOrder(id, netEarnings) {
-            const otp = prompt('أدخل كود التسليم المكون من 4 أرقام:');
+        async function deliverOrder(id) {
+            const otp = prompt('أدخل كود التسليم:');
             if(!otp) return;
             
-            const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
-            if(error || !isValid) return alert('كود خاطئ!');
+            const { data: isValid } = await supabaseClient.rpc('verify_delivery', { p_order_id: id, p_otp: otp });
+            if(!isValid) return alert('كود خاطئ!');
 
             await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
-            alert('تم التسليم بنجاح! تمت إضافة الأرباح لمحفظتك.');
+            if (watchId) navigator.geolocation.clearWatch(watchId); // إيقاف التتبع
+            alert('تم التسليم بنجاح!');
             
-            let newBalance = Number(currentProfile.wallet_balance) + Number(netEarnings);
+            let newBalance = Number(currentProfile.wallet_balance) + 450;
             await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
             currentProfile.wallet_balance = newBalance;
             document.getElementById('driverWallet').innerText = formatMoney(newBalance);
-            
             renderDriverOrders();
         }
 
-        function getStatusText(status) {
-            const s = { pending: 'انتظار', accepted: 'تم القبول', picked_up: 'جاري النقل', delivered: 'تم التسليم' };
-            return s[status] || status;
+        // --- الأدمن ---
+        async function loadAdminData() {
+            let { data: users } = await supabaseClient.from('profiles').select('*');
+            document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
+                <div class="bg-white p-3 rounded-lg mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
+                    <b>${u.full_name}</b> (${u.role})<br> 📞 ${u.phone}
+                    ${u.role === 'driver' && !u.approved ? `<button onclick="approveDriver('${u.id}')" class="mt-2 w-full bg-green-500 text-white py-1 rounded">✅ موافقة</button>` : ''}
+                </div>
+            `).join('');
         }
-        function getPaymentText(method) {
-            const m = { cash: 'كاش', instapay: 'إنستا باي', visa: 'فيزا' };
-            return m[method] || 'كاش';
+
+        async function approveDriver(userId) {
+            await supabaseClient.from('profiles').update({ approved: true }).eq('id', userId);
+            alert('تم الاعتماد!'); loadAdminData();
+        }
+
+        // --- مساعدات ---
+        function showScreen(id) {
+            ['authScreen', 'clientScreen', 'driverScreen', 'adminScreen', 'approvalScreen'].forEach(s => {
+                let el = document.getElementById(s); if(el) el.classList.add('hide');
+            });
+            let target = document.getElementById(id); if(target) target.classList.remove('hide');
+        }
+
+        async function logout() {
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+            if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+            await supabaseClient.auth.signOut();
+            location.reload();
+        }
+
+        function getStatusText(s) {
+            return { pending: 'انتظار', accepted: 'تم القبول', picked_up: 'جاري النقل', delivered: 'تم التسليم' }[s] || s;
         }
 
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
-            if (session) loadApp(session.user);
-            else showScreen('authScreen');
+            if (session) loadApp(session.user); else showScreen('authScreen');
         });
     </script>
 </body>
