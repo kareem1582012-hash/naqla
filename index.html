@@ -159,7 +159,7 @@
                     phone: phone,
                     role: role,
                     wallet_balance: role === 'driver' ? 0 : 2500,
-                    approved: role === 'client' ? true : false // العملاء مفعلين تلقائياً، السائقين محتاجين موافقة
+                    approved: role === 'client' ? true : false
                 });
 
                 if (profileError) console.error(profileError);
@@ -180,7 +180,6 @@
             let { data, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).maybeSingle();
             
             if (!data) {
-                // fallback لو البروفايل مش موجود
                 const { data: newProfile, error: insertError } = await supabaseClient.from('profiles').insert({
                     id: user.id,
                     full_name: user.email.split('@')[0],
@@ -379,12 +378,19 @@
             renderDriverOrders();
         }
 
+        // هنا التعديل الأمني الجديد
         async function deliverOrder(id) {
             const otp = prompt('أدخل كود التسليم المكون من 4 أرقام:');
             if(!otp) return;
             
-            const { data } = await supabaseClient.from('orders').select('otp_code').eq('id', id).single();
-            if(data.otp_code !== otp) return alert('كود خاطئ!');
+            // استدعاء الدالة الآمنة من السيرفر بدلاً من قراءة الكود مباشرة
+            const { data: isValid, error } = await supabaseClient.rpc('verify_delivery', {
+                p_order_id: id,
+                p_otp: otp
+            });
+            
+            if(error) return alert('حدث خطأ: ' + error.message);
+            if(!isValid) return alert('كود خاطئ!');
 
             await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id);
             alert('تم التسليم بنجاح!');
