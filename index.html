@@ -53,6 +53,7 @@
             <h2 class="text-xl font-bold text-red-600 mb-4">حسابك قيد المراجعة</h2>
         </div>
 
+        <!-- واجهة العميل -->
         <div id="clientScreen" class="hide">
             <div class="bg-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
@@ -81,17 +82,18 @@
             <div id="clientOrders"></div>
         </div>
 
+        <!-- واجهة السائق -->
         <div id="driverScreen" class="hide">
             <audio id="notificationSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
 
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
-                    <p class="text-gray-400 text-sm">صافي الأرباح</p>
+                    <p class="text-gray-400 text-sm">رصيد الأرباح</p>
                     <p class="text-2xl font-bold text-yellow-500" id="driverWallet">0 ج.م</p>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="enableSound()" id="soundBtn" class="bg-yellow-500 text-black px-3 py-1 rounded text-sm font-bold">🔔 تفعيل الصوت</button>
-                    <button onclick="renderDriverOrders()" class="bg-gray-700 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">🔄</button>
+                <div class="flex gap-2 flex-col">
+                    <button onclick="requestPayout()" class="bg-green-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-green-600">💸 سحب الأرباح</button>
+                    <button onclick="enableSound()" id="soundBtn" class="bg-yellow-500 text-black px-3 py-1 rounded text-xs font-bold">🔔 تفعيل الصوت</button>
                 </div>
             </div>
 
@@ -102,6 +104,7 @@
             <div id="driverPendingOrders" class="pb-10"></div>
         </div>
 
+        <!-- واجهة الأدمن -->
         <div id="adminScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
                 <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
@@ -120,6 +123,12 @@
                     <p class="text-xs text-gray-500">صافي أرباح المنصة (5%)</p>
                     <p class="text-xl font-bold text-red-700" id="statPlatformCommission">0 ج.م</p>
                 </div>
+            </div>
+
+            <!-- طلبات السحب -->
+            <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-green-500">
+                <h3 class="font-bold text-lg mb-2 text-green-800">طلبات سحب الأرباح 💸</h3>
+                <div id="adminPayoutsList"></div>
             </div>
             
             <div class="bg-white p-4 rounded-xl shadow-sm mb-4 border-r-4 border-blue-500">
@@ -164,7 +173,7 @@
                 .then(() => {
                     isSoundEnabled = true;
                     document.getElementById('soundBtn').innerText = '✅ الصوت يعمل';
-                    document.getElementById('soundBtn').className = 'bg-green-500 text-white px-3 py-1 rounded text-sm font-bold';
+                    document.getElementById('soundBtn').className = 'bg-green-500 text-white px-3 py-1 rounded text-xs font-bold';
                 })
                 .catch(e => {
                     alert('لم نتمكن من تفعيل الصوت. تأكد من عدم كتم صوت الهاتف.');
@@ -386,6 +395,31 @@
         }
 
         // --- السائق ---
+        async function requestPayout() {
+            const method = prompt('اختر طريقة السحب (اكتب: فودافون كاش أو إنستاباي):');
+            if(!method) return;
+            if (method !== 'فودافون كاش' && method !== 'إنستاباي') return alert('يرجى كتابة "فودافون كاش" أو "إنستاباي" فقط.');
+
+            const amount = prompt(`أدخل المبلغ اللي عايز تسحبه (رصيدك الحالي: ${currentProfile.wallet_balance}):`);
+            if(!amount || isNaN(amount) || amount <= 0) return;
+            if (Number(amount) > currentProfile.wallet_balance) return alert('المبلغ أكبر من رصيدك المتاح!');
+
+            // خصم المبلغ من المحفظة فوراً
+            let newBalance = Number(currentProfile.wallet_balance) - Number(amount);
+            await supabaseClient.from('profiles').update({ wallet_balance: newBalance }).eq('id', currentUser.id);
+            
+            // إرسال الطلب للإدارة
+            await supabaseClient.from('payout_requests').insert({
+                driver_id: currentUser.id,
+                amount: Number(amount),
+                method: method
+            });
+
+            currentProfile.wallet_balance = newBalance;
+            document.getElementById('driverWallet').innerText = formatMoney(newBalance);
+            alert('تم إرسال طلب السحب للإدارة بنجاح! سيتم تحويل المبلغ قريباً.');
+        }
+
         async function renderDriverOrders() {
             try {
                 let { data: myOrders, error: err1 } = await supabaseClient.from('orders').select('*').eq('driver_id', currentUser.id).neq('status', 'delivered').order('created_at', { ascending: false });
@@ -513,14 +547,30 @@
             let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
             let safeOrders = orders || [];
 
-            // حساب الإحصائيات مع خصم 5%
             let totalOrders = safeOrders.length;
             let totalRevenue = safeOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
-            let commission = totalRevenue * 0.05; // 5%
+            let commission = totalRevenue * 0.05;
 
             document.getElementById('statTotalOrders').innerText = totalOrders;
             document.getElementById('statTotalRevenue').innerText = formatMoney(totalRevenue);
             document.getElementById('statPlatformCommission').innerText = formatMoney(commission);
+
+            // قائمة طلبات السحب
+            let { data: payouts } = await supabaseClient.from('payout_requests').select('*').eq('status', 'pending');
+            if (payouts && payouts.length > 0) {
+                document.getElementById('adminPayoutsList').innerHTML = payouts.map(p => {
+                    let driver = users.find(u => u.id === p.driver_id);
+                    return `
+                    <div class="bg-green-50 p-3 rounded-lg mb-2 border border-green-200 text-sm">
+                        <p class="font-bold">السائق: ${driver ? driver.full_name : 'غير معروف'} (${driver ? driver.phone : ''})</p>
+                        <p>المبلغ: <span class="font-bold text-green-700">${formatMoney(p.amount)}</span></p>
+                        <p>الطريقة: <span class="font-bold text-blue-600">${p.method}</span></p>
+                        <button onclick="markPayoutPaid('${p.id}')" class="mt-2 bg-green-600 text-white py-1 px-3 rounded text-xs font-bold">تم التحويل ✅</button>
+                    </div>`;
+                }).join('');
+            } else {
+                document.getElementById('adminPayoutsList').innerHTML = '<p class="text-gray-500 text-sm">لا يوجد طلبات سحب جديدة.</p>';
+            }
 
             let activeOrders = safeOrders.filter(o => o.status === 'accepted' || o.status === 'picked_up');
             
@@ -546,6 +596,13 @@
                     <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
                 </div>
             `).join('');
+        }
+
+        async function markPayoutPaid(payoutId) {
+            if(!confirm('هل أنت متأكد إنك حولت المبلغ للسائق؟')) return;
+            await supabaseClient.from('payout_requests').update({ status: 'approved' }).eq('id', payoutId);
+            alert('تم تأكيد التحويل!');
+            loadAdminData();
         }
 
         function initAdminLiveTracking(order) {
