@@ -8,7 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- إضافة ملفات الخريطة -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
@@ -44,6 +43,7 @@
             <p class="text-center text-xs text-gray-500 mt-3">لو مفيش حساب، هيتم إنشاء حساب جديد تلقائياً</p>
         </div>
 
+        <!-- واجهة العميل -->
         <div id="clientScreen" class="hide">
             <div class="bg-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
@@ -67,7 +67,6 @@
                     <label for="labor" class="text-sm font-bold text-gray-700">أحتاج عمال تحميل (+240 ج.م)</label>
                 </div>
                 
-                <!-- الخريطة هنا -->
                 <div id="map"></div>
                 <button onclick="getLocation()" class="w-full bg-blue-500 hover:bg-blue-400 text-white font-bold p-2 rounded-lg mb-3 text-sm">📍 استخدام موقعي الحالي (GPS)</button>
 
@@ -78,6 +77,7 @@
             <div id="clientOrders"></div>
         </div>
 
+        <!-- واجهة السائق -->
         <div id="driverScreen" class="hide">
             <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 flex justify-between items-center">
                 <div>
@@ -97,6 +97,20 @@
             <div id="driverPendingOrders"></div>
         </div>
 
+        <!-- واجهة الأدمن (الإدارة) -->
+        <div id="adminScreen" class="hide">
+            <div class="bg-gray-900 text-white p-5 rounded-2xl shadow-sm mb-4 text-center">
+                <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
+                <p class="text-sm text-gray-400 mt-1">مرحباً بك يا مدير المنصة</p>
+            </div>
+
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">المستخدمين المسجلين</h3>
+            <div id="adminUsersList" class="mb-6"></div>
+
+            <h3 class="font-bold text-lg mb-2 text-gray-800 mt-6">كل الطلبات</h3>
+            <div id="adminOrdersList"></div>
+        </div>
+
     </main>
 
     <script>
@@ -111,7 +125,7 @@
         // متغيرات الخريطة
         let map = null;
         let marker = null;
-        let selectedLat = 30.0444; // القاهرة افتراضياً
+        let selectedLat = 30.0444; 
         let selectedLng = 31.2357;
 
         const formatMoney = (num) => Number(num || 0).toLocaleString('ar-EG') + ' ج.م';
@@ -175,15 +189,43 @@
                 document.getElementById('clientWallet').innerText = formatMoney(data.wallet_balance);
                 showScreen('clientScreen');
                 renderClientOrders();
-                setTimeout(initMap, 200); // تشغيل الخريطة بعد ظهور الشاشة
-            } else {
+                setTimeout(initMap, 200);
+            } else if(data.role === 'driver') {
                 document.getElementById('driverWallet').innerText = formatMoney(data.wallet_balance);
                 showScreen('driverScreen');
                 renderDriverOrders();
+            } else if(data.role === 'admin') {
+                showScreen('adminScreen');
+                loadAdminData();
             }
         }
 
-        // دوال الخريطة
+        // --- دوال الإدارة (الأدمن) ---
+        async function loadAdminData() {
+            // جلب كل المستخدمين
+            let { data: users } = await supabaseClient.from('profiles').select('*');
+            document.getElementById('adminUsersList').innerHTML = (users || []).map(u => `
+                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm border-r-4 ${u.role === 'admin' ? 'border-red-500' : u.role === 'driver' ? 'border-blue-500' : 'border-green-500'}">
+                    <b>${u.full_name}</b> <span class="text-gray-500">(${u.role})</span><br>
+                    📞 ${u.phone || 'لا يوجد'}
+                </div>
+            `).join('');
+
+            // جلب كل الطلبات
+            let { data: orders } = await supabaseClient.from('orders').select('*').order('created_at', { ascending: false });
+            document.getElementById('adminOrdersList').innerHTML = (orders || []).map(o => `
+                <div class="bg-white p-3 rounded-lg shadow-sm mb-2 text-sm">
+                    <div class="flex justify-between font-bold">
+                        <span>${o.cargo_type}</span>
+                        <span class="text-yellow-600">${formatMoney(o.price)}</span>
+                    </div>
+                    <p class="text-gray-500 mt-1">من: ${o.pickup_address} <br> إلى: ${o.dropoff_address}</p>
+                    <p class="text-xs mt-1 text-gray-400">الحالة: ${getStatusText(o.status)}</p>
+                </div>
+            `).join('');
+        }
+
+        // --- دوال الخريطة ---
         function initMap() {
             if (!document.getElementById('map')) return;
             if (map) { map.remove(); map = null; }
@@ -215,11 +257,14 @@
                     marker.setLatLng([selectedLat, selectedLng]);
                 }
                 alert('تم تحديد موقعك بنجاح ✅');
-            }, () => alert('تعذر تحديد الموقع، تأكد من إعطاء صلاحية الموقع للمتصفح.'));
+            }, () => alert('تعذر تحديد الموقع، تأكد من إعطاء صلاحية الموقع.'));
         }
 
         function showScreen(id) {
-            ['authScreen', 'clientScreen', 'driverScreen'].forEach(s => document.getElementById(s).classList.add('hide'));
+            ['authScreen', 'clientScreen', 'driverScreen', 'adminScreen'].forEach(s => {
+                let el = document.getElementById(s);
+                if(el) el.classList.add('hide');
+            });
             document.getElementById(id).classList.remove('hide');
         }
 
