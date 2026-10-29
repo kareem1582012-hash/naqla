@@ -89,7 +89,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
   <div class="card">
     <h3 class="font-bold text-lg mb-3">طلب شحنة جديدة</h3>
     
-    <!-- خانات العناوين مع زرار البحث -->
     <div class="flex gap-2 mb-2">
       <input type="text" id="pickup" placeholder="عنوان التحميل" class="inp !mb-0" maxlength="200">
       <button onclick="searchAddress('pickup')" class="bg-gray-200 px-3 rounded-lg font-bold">🔍</button>
@@ -174,6 +173,20 @@ if(typeof L==='undefined'||typeof supabase==='undefined'){
 const SUPABASE_URL='https://jzcwocvkqbuhpactazus.supabase.co';
 const SUPABASE_KEY='sb_publishable_ndfcyfS3Mz90d5_E-LQnbg_FW-cyLsJ';
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+// === طلب إذن الإشعارات ===
+function askNotificationPermission() {
+  if ("Notification" in window) {
+    if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          console.log("تم تفعيل الإشعارات بنجاح");
+        }
+      });
+    }
+  }
+}
+askNotificationPermission();
 
 const WALLET_ENABLED=false;
 const WHATSAPP='201008781263';
@@ -276,6 +289,15 @@ function listen(rerender,filter){
     const o=p.new;if(!o||!o.id)return;
     if(known[o.id]!==o.status){
       clearTimeout(debounce);debounce=setTimeout(rerender,400);
+      
+      // إظهار إشعار للمتصفح
+      if (Notification.permission === "granted") {
+        new Notification("مسار - تحديث جديد", {
+          body: "هناك تحديث في الطلبات، افتح التطبيق للتفاصيل.",
+          icon: "https://cdn-icons-png.flaticon.com/512/7104/7104020.png"
+        });
+      }
+      
     }else if(live[o.id])setDriverMarker(live[o.id],o);
   }).subscribe();
 }
