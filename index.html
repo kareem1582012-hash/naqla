@@ -24,7 +24,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
 </head>
 <body>
 
-<!-- بانر التثبيت -->
 <div id="installBanner" class="hide fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-3 rounded-xl shadow-2xl z-[9999] border border-gray-700 flex justify-between items-center" dir="rtl">
   <div class="flex items-center gap-3">
     <div class="bg-yellow-500 text-black font-black text-xl rounded-lg w-10 h-10 flex items-center justify-center">M</div>
@@ -49,7 +48,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
 
 <main class="max-w-md mx-auto p-4">
 
-<!-- الدخول / التسجيل -->
 <div id="authScreen" class="hide bg-white p-6 rounded-2xl shadow-lg mt-6">
   <div class="flex mb-4 bg-gray-100 rounded-lg p-1">
     <button id="tabLogin" onclick="setAuthMode('login')" class="flex-1 py-2 rounded-lg font-bold">دخول</button>
@@ -79,7 +77,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
   <p class="text-sm text-gray-500 mt-2">هتتواصل معاك الإدارة لاستكمال التحقق من بياناتك.</p>
 </div>
 
-<!-- العميل -->
 <div id="clientScreen" class="hide">
   <div id="walletBox" class="card flex justify-between items-center hide">
     <div><p class="text-gray-500 text-sm">رصيد المحفظة</p><p class="text-2xl font-bold text-green-600" id="clientWallet">0</p></div>
@@ -97,6 +94,17 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
       <input type="text" id="dropoff" placeholder="عنوان التسليم" class="inp !mb-0" maxlength="200">
       <button onclick="searchAddress('dropoff')" class="bg-gray-200 px-3 rounded-lg font-bold">🔍</button>
     </div>
+
+    <!-- قائمة نوع الشحنة الجديدة -->
+    <select id="cargoType" class="inp font-bold">
+      <option value="أثاث">🛋️ أثاث (منزل / مكتب)</option>
+      <option value="أجهزة كهربائية">📺 أجهزة كهربائية وإلكترونيات</option>
+      <option value="قطع غيار">⚙️ قطع غيار ومعدات</option>
+      <option value="مواد غذائية">🛒 مواد غذائية / بقالة</option>
+      <option value="ملابس">👕 ملابس وأقمشة</option>
+      <option value="مواد بناء">🧱 مواد بناء / أسمنت</option>
+      <option value="أخرى">📦 أخرى</option>
+    </select>
 
     <select id="vehicleType" class="inp" onchange="updateEstimate()">
       <option value="light">🚐 نقل خفيف (سوزوكي / ربع نقل)</option>
@@ -120,7 +128,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
   <div id="clientOrders"></div>
 </div>
 
-<!-- السائق -->
 <div id="driverScreen" class="hide">
   <audio id="notificationSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
   <div class="bg-gray-900 text-white p-5 rounded-2xl mb-4 flex justify-between items-center">
@@ -140,7 +147,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
   <div id="driverPendingOrders" class="pb-10"></div>
 </div>
 
-<!-- الأدمن -->
 <div id="adminScreen" class="hide">
   <div class="bg-gray-900 p-5 rounded-2xl mb-4 text-center">
     <h2 class="text-2xl font-bold text-yellow-500">لوحة تحكم الإدارة 🛡️</h2>
@@ -160,7 +166,6 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
 </div>
 </main>
 
-<!-- نافذة الإيصال المخصصة (عشان نلغي اسم اللينك) -->
 <div id="receiptModal" class="hide fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" dir="rtl">
   <div class="bg-white p-6 rounded-2xl shadow-2xl text-center max-w-xs w-full mx-4">
     <div class="text-4xl mb-2">📄</div>
@@ -186,15 +191,10 @@ const SUPABASE_URL='https://jzcwocvkqbuhpactazus.supabase.co';
 const SUPABASE_KEY='sb_publishable_ndfcyfS3Mz90d5_E-LQnbg_FW-cyLsJ';
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
-// === طلب إذن الإشعارات ===
 function askNotificationPermission() {
   if ("Notification" in window) {
     if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-      Notification.requestPermission().then(permission => {
-        if (permission === "granted") {
-          console.log("تم تفعيل الإشعارات بنجاح");
-        }
-      });
+      Notification.requestPermission();
     }
   }
 }
@@ -302,7 +302,6 @@ function listen(rerender,filter){
     if(known[o.id]!==o.status){
       clearTimeout(debounce);debounce=setTimeout(rerender,400);
       
-      // إظهار إشعار للمتصفح
       if (Notification.permission === "granted") {
         new Notification("مسار - تحديث جديد", {
           body: "هناك تحديث في الطلبات، افتح التطبيق للتفاصيل.",
@@ -400,12 +399,13 @@ async function topUpWallet(){
 
 async function createOrder(){
   const pickup=$('pickup').value.trim(),dropoff=$('dropoff').value.trim();
+  const cargo=$('cargoType').value;
   if(!pickup||!dropoff)return alert('ادخل العناوين');
   if(!pos.pickup||!pos.dropoff)return alert('حدد التحميل والتسليم على الخريطة');
   const btn=$('orderBtn');btn.disabled=true;
   try{
     await rpc('create_order',{p_pickup:pickup,p_dropoff:dropoff,p_plat:pos.pickup[0],p_plng:pos.pickup[1],
-      p_dlat:pos.dropoff[0],p_dlng:pos.dropoff[1],p_vehicle:$('vehicleType').value,
+      p_dlat:pos.dropoff[0],p_dlng:pos.dropoff[1],p_vehicle:$('vehicleType').value, p_cargo: cargo,
       p_pay:WALLET_ENABLED?$('payment_method').value:'cash'});
     alert('تم إرسال الطلب! هتلاقي كود التسليم في شحناتي، أعطيه للسائق وقت التسليم فقط.');
     $('pickup').value='';$('dropoff').value='';initClientMap();updateEstimate();
