@@ -23,6 +23,19 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
 </style>
 </head>
 <body>
+  <div id="installBanner" class="hide fixed bottom-20 left-4 right-4 bg-gray-900 text-white p-3 rounded-xl shadow-2xl z-[9999] border border-gray-700 flex justify-between items-center" dir="rtl">
+  <div class="flex items-center gap-3">
+    <div class="bg-yellow-500 text-black font-black text-xl rounded-lg w-10 h-10 flex items-center justify-center">M</div>
+    <div>
+      <p class="font-bold text-sm">ثبت تطبيق مسار</p>
+      <p class="text-xs text-gray-400" id="installDesc">عشان يفتح بسرعة ومن غير إنترنت</p>
+    </div>
+  </div>
+  <div class="flex gap-2">
+    <button onclick="installApp()" id="btnInstall" class="bg-yellow-500 text-black px-3 py-1.5 rounded-lg text-sm font-bold">تثبيت</button>
+    <button onclick="document.getElementById('installBanner').classList.add('hide')" class="text-gray-400 hover:text-white px-2">✕</button>
+  </div>
+  </div>
 <header class="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-md">
   <div class="flex items-center gap-3">
     <div class="bg-yellow-500 text-black font-black text-xl rounded-lg w-10 h-10 flex items-center justify-center">M</div>
@@ -508,6 +521,44 @@ async function adjustWallet(id){
 
 setAuthMode('login');
 db.auth.getSession().then(({data:{session}})=>{if(session)loadApp(session.user);else showScreen('authScreen');});
+  // كود تثبيت التطبيق
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = document.getElementById('installBanner');
+  if(banner) banner.classList.remove('hide');
+});
+
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      deferredPrompt = null;
+      const banner = document.getElementById('installBanner');
+      if(banner) banner.classList.add('hide');
+    });
+  } else {
+    alert('لتثبيت التطبيق على الآيفون:\n1. اضغط على زر المشاركة (المربع اللي فيه سهم).\n2. اختار "إضافة إلى الشاشة الرئيسية".');
+  }
+}
+
+const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+const isInStandaloneMode = () => ('standalone' in window.navigator) && (window.navigator.standalone);
+
+if (isIos() && !isInStandaloneMode()) {
+  const banner = document.getElementById('installBanner');
+  if(banner) {
+    banner.classList.remove('hide');
+    document.getElementById('installDesc').innerText = 'اضغط مشاركة ثم "إضافة للشاشة"';
+    document.getElementById('btnInstall').innerText = 'طريقة التثبيت';
+  }
+}
+
+window.addEventListener('appinstalled', () => {
+  const banner = document.getElementById('installBanner');
+  if(banner) banner.classList.add('hide');
+});
 </script>
 </body>
 </html>
