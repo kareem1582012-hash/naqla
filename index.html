@@ -568,6 +568,62 @@ window.addEventListener('appinstalled', () => {
     alert('خطأ: ' + e.message);
   }
 }
+  // ==========================================
+// كود إضافة زرار الإيصال للسائق والأدمن
+// ==========================================
+async function renderDriverOrders() {
+  const {data:myOrders}=await db.from('orders').select('*').eq('driver_id',me.id).order('created_at',{ascending:false});
+  const {data:pend}=await db.from('orders').select('*').eq('status','pending').is('driver_id',null);
+  const allOrders = myOrders || [];
+  
+  if($('driverMyOrders')) {
+    $('driverMyOrders').innerHTML = allOrders.map(o => `
+      <div class="card border-r-4 ${o.status==='delivered'?'border-green-500':'border-blue-500'}">
+        <div class="flex justify-between"><span class="font-bold">${esc(o.cargo_type)}</span><span class="text-xs bg-gray-100 px-2 py-1 rounded">${STATUS[o.status]||esc(o.status)}</span></div>
+        <p class="text-sm mt-2 text-gray-600">📍 من: ${esc(o.pickup_address)}<br>🏁 إلى: ${esc(o.dropoff_address)}</p>
+        <p class="font-bold mt-2">${money(o.price)}</p>
+        ${o.status === 'delivered' ? `<button onclick="showReceipt('${o.id}')" class="mt-2 w-full bg-gray-800 text-white text-xs py-2 rounded">📄 عرض إيصال التسليم</button>` : ''}
+      </div>
+    `).join('') || '<p class="text-sm text-gray-500">لا توجد رحلات حالية</p>';
+  }
+
+  if($('driverPendingOrders')) {
+    $('driverPendingOrders').innerHTML = (pend||[]).map(o => `
+      <div class="card border-r-4 border-yellow-500">
+        <div class="flex justify-between"><span class="font-bold">${esc(o.cargo_type)}</span><span class="text-xs bg-gray-100 px-2 py-1 rounded">انتظار</span></div>
+        <p class="text-sm mt-2 text-gray-600">📍 من: ${esc(o.pickup_address)}<br>🏁 إلى: ${esc(o.dropoff_address)}</p>
+        <p class="font-bold mt-2">${money(o.price)}</p>
+        <button onclick="acceptOrder('${o.id}')" class="mt-2 w-full bg-yellow-500 font-bold py-2 rounded text-sm">قبول الطلب</button>
+      </div>
+    `).join('') || '<p class="text-sm text-gray-500">لا توجد طلبات متاحة</p>';
+  }
+}
+
+async function loadAdminData() {
+  const {data:os} = await db.from('orders').select('*').order('created_at',{ascending:false});
+  const {data:users} = await db.from('profiles').select('*');
+  const {data:pays} = await db.from('payout_requests').select('*').eq('status','pending');
+  
+  if($('adminOrdersList')) {
+    $('adminOrdersList').innerHTML = (os||[]).map(o => `
+      <div class="card border-r-4 border-gray-300 mb-2">
+        <div class="flex justify-between font-bold"><span>${esc(o.cargo_type)}</span><span>${money(o.price)}</span></div>
+        <p class="text-xs text-gray-500">الحالة: ${STATUS[o.status]||esc(o.status)}</p>
+        ${o.status === 'delivered' ? `<button onclick="showReceipt('${o.id}')" class="text-xs text-blue-600 underline mt-2 block">📄 عرض إيصال التسليم</button>` : ''}
+      </div>
+    `).join('');
+  }
+  
+  if($('adminUsersList')) {
+    $('adminUsersList').innerHTML = (users||[]).map(u => `
+      <div class="card flex justify-between items-center">
+        <div><p class="font-bold text-sm">${esc(u.full_name)}</p><p class="text-xs text-gray-500">${u.role} | ${esc(u.phone)}</p></div>
+        ${u.role==='driver'&&!u.approved?`<button onclick="approveDriver('${u.id}')" class="bg-green-500 text-white text-xs px-2 py-1 rounded">✅ موافقة</button>`:''}
+      </div>
+    `).join('');
+  }
+}
+// ==========================================
 </script>
 </body>
 </html>
