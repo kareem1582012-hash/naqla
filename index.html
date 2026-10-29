@@ -559,6 +559,15 @@ window.addEventListener('appinstalled', () => {
   const banner = document.getElementById('installBanner');
   if(banner) banner.classList.add('hide');
 });
+  async function showReceipt(orderId) {
+  try {
+    // بنستدعي الدالة اللي عملناها في قاعدة البيانات
+    const otp = await rpc('get_order_otp', { p_order_id: orderId });
+    alert('📄 إيصال التسليم\n\nكود التسليم الذي تم استخدامه: ' + otp + '\n\n(هذا الكود يثبت تسليم الشحنة بنجاح)');
+  } catch (e) {
+    alert('خطأ: ' + e.message);
+  }
+}
 </script>
 </body>
 </html>
