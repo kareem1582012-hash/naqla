@@ -88,8 +88,17 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
 
   <div class="card">
     <h3 class="font-bold text-lg mb-3">طلب شحنة جديدة</h3>
-    <input type="text" id="pickup" placeholder="عنوان التحميل" class="inp" maxlength="200">
-    <input type="text" id="dropoff" placeholder="عنوان التسليم" class="inp" maxlength="200">
+    
+    <!-- خانات العناوين مع زرار البحث -->
+    <div class="flex gap-2 mb-2">
+      <input type="text" id="pickup" placeholder="عنوان التحميل" class="inp !mb-0" maxlength="200">
+      <button onclick="searchAddress('pickup')" class="bg-gray-200 px-3 rounded-lg font-bold">🔍</button>
+    </div>
+    <div class="flex gap-2 mb-2">
+      <input type="text" id="dropoff" placeholder="عنوان التسليم" class="inp !mb-0" maxlength="200">
+      <button onclick="searchAddress('dropoff')" class="bg-gray-200 px-3 rounded-lg font-bold">🔍</button>
+    </div>
+
     <select id="vehicleType" class="inp" onchange="updateEstimate()">
       <option value="light">🚐 نقل خفيف (سوزوكي / ربع نقل)</option>
       <option value="medium">🚚 نقل متوسط (جامبو)</option>
@@ -321,6 +330,33 @@ async function updateEstimate(){
     const p=await rpc('estimate_price',{a1:pos.pickup[0],o1:pos.pickup[1],a2:pos.dropoff[0],o2:pos.dropoff[1],v:$('vehicleType').value});
     $('estimate').innerText='السعر التقديري: '+money(p);
   }catch(e){$('estimate').innerText='';}
+}
+
+async function searchAddress(type) {
+  const address = $(type).value.trim();
+  if(!address) return alert('اكتب العنوان الأول');
+  
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ' مصر')}&limit=1`);
+    const data = await res.json();
+    
+    if(data && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      
+      pos[type] = [lat, lng];
+      
+      if(mk[type]) mk[type].setLatLng([lat, lng]);
+      else mk[type] = L.marker([lat, lng], {draggable:true}).addTo(map).bindPopup(type==='pickup'?'التحميل':'التسليم');
+      
+      map.setView([lat, lng], 14);
+      updateEstimate();
+    } else {
+      alert('ملقيتش العنوان ده، جرب تكتبه بشكل أوضح (مثلاً: شارع الجيش، طنطا) أو حدده إيدك على الخريطة');
+    }
+  } catch(e) {
+    alert('حصل خطأ في البحث، جرب تاني');
+  }
 }
 
 async function topUpWallet(){
