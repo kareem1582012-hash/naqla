@@ -624,6 +624,33 @@ async function loadAdminData() {
   }
 }
 // ==========================================
+  async function renderDriverOrders() {
+  const {data:myOrders}=await db.from('orders').select('*').eq('driver_id',me.id).order('created_at',{ascending:false});
+  const {data:pend}=await db.from('orders').select('*').eq('status','pending').is('driver_id',null);
+  const allOrders = myOrders || [];
+  
+  if($('driverMyOrders')) {
+    $('driverMyOrders').innerHTML = allOrders.map(o => {
+      let actionBtn = '';
+      if (o.status === 'accepted') {
+        actionBtn = `<button onclick="pickupOrder('${o.id}')" class="mt-2 w-full bg-blue-500 text-white py-2 rounded text-sm font-bold shadow">📦 تأكيد الاستلام</button>`;
+      } else if (o.status === 'picked_up') {
+        actionBtn = `<button onclick="deliverOrder('${o.id}')" class="mt-2 w-full bg-green-500 text-white py-2 rounded text-sm font-bold shadow">✅ تسليم الشحنة</button>`;
+      } else if (o.status === 'delivered') {
+        actionBtn = `<button onclick="showReceipt('${o.id}')" class="mt-2 w-full bg-gray-800 text-white text-xs py-2 rounded">📄 عرض إيصال التسليم</button>`;
+      }
+
+      return `
+        <div class="card border-r-4 ${o.status==='delivered'?'border-green-500':'border-blue-500'}">
+          <div class="flex justify-between"><span class="font-bold">${esc(o.cargo_type)}</span><span class="text-xs bg-gray-100 px-2 py-1 rounded">${STATUS[o.status]||esc(o.status)}</span></div>
+          <p class="text-sm mt-2 text-gray-600">📍 من: ${esc(o.pickup_address)}<br>🏁 إلى: ${esc(o.dropoff_address)}</p>
+          <p class="font-bold mt-2">${money(o.price)}</p>
+          ${actionBtn}
+        </div>
+      `;
+    }).join('') || '<p class="text-sm text-gray-500">لا توجد رحلات حالية</p>';
+  }
+}
 </script>
 </body>
 </html>
