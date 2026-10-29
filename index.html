@@ -160,6 +160,18 @@ body{font-family:'Cairo',sans-serif;background:#f3f4f6;padding-bottom:80px}
 </div>
 </main>
 
+<!-- نافذة الإيصال المخصصة (عشان نلغي اسم اللينك) -->
+<div id="receiptModal" class="hide fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" dir="rtl">
+  <div class="bg-white p-6 rounded-2xl shadow-2xl text-center max-w-xs w-full mx-4">
+    <div class="text-4xl mb-2">📄</div>
+    <h3 class="text-xl font-bold mb-2 text-gray-800">إيصال التسليم</h3>
+    <p class="text-sm text-gray-600 mb-2">كود التسليم الذي تم استخدامه:</p>
+    <p id="receiptOtp" class="text-4xl font-black text-red-600 tracking-widest mb-4">----</p>
+    <p class="text-xs text-gray-500 mb-6">(هذا الكود يثبت تسليم الشحنة)</p>
+    <button onclick="document.getElementById('receiptModal').classList.add('hide')" class="w-full bg-yellow-500 text-black font-bold py-3 rounded-xl shadow">حسناً</button>
+  </div>
+</div>
+
 <a href="https://wa.me/201008781263" target="_blank" rel="noopener" class="fixed bottom-4 left-4 bg-green-500 text-white p-4 rounded-full shadow-lg z-50">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
 </a>
@@ -494,7 +506,8 @@ async function deliverOrder(id){
 async function showReceipt(orderId){
   try{
     const otp=await rpc('get_order_otp',{p_order_id:orderId});
-    alert('📄 إيصال التسليم\n\nكود التسليم: '+otp+'\n\n(هذا الكود يثبت تسليم الشحنة)');
+    document.getElementById('receiptOtp').innerText = otp;
+    document.getElementById('receiptModal').classList.remove('hide');
   }catch(e){alert('خطأ: '+e.message);}
 }
 
